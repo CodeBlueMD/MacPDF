@@ -13,13 +13,16 @@
 		2164948B45FA7ADB1AB8CAB4 /* ContentSurgery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */; };
 		24223F44DD8F834A8529F821 /* PDFFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC24EB343E827AF3D06C31C /* PDFFile.swift */; };
 		25B6F2931CF9CE19BDFB371C /* MacPDFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76BD6DA84E963C0BBC6C27B7 /* MacPDFApp.swift */; };
+		356E9B1712F8E0B68BFE5341 /* PatientInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C8E5B39806484A1929B939 /* PatientInfo.swift */; };
 		4B69DBCCC4412D2ED0E429DE /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E1DE9F92CB9D03695CC327 /* SidebarView.swift */; };
 		514DCBE8D563BEC633C53385 /* libpdfium.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 8CE807045F35C32FC725B2D2 /* libpdfium.dylib */; };
 		5432D8CC7274C7EADEB682D2 /* PDFium.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F0F587EB1AAF2B7335DB1D /* PDFium.swift */; };
+		7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D5DAB5444C22A8806DF29E /* CleanCopy.swift */; };
 		7FCD90113D16FECFDB215616 /* ImageEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0269C7E635AEFB2915EFA4AF /* ImageEditing.swift */; };
 		847F3EC8A0D9FCAA04A23202 /* Export.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4ECFED9A79115C38F62CD2 /* Export.swift */; };
 		AD19ADC4EAA2399246971C2E /* ModeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E767DCA8C42944A6967749 /* ModeBar.swift */; };
 		BCA2B7A7523FB67D93C50BF4 /* OCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FA36805CEC1312F23E1A76 /* OCR.swift */; };
+		C733F645E21C345D8A6CD307 /* PatientInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */; };
 		CA34C900CB03B2F0FDDE2B32 /* DocumentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B923427EE30130933ECAFF /* DocumentModel.swift */; };
 		CAFBDEF6D379A51034EDD090 /* libpdfium.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 8CE807045F35C32FC725B2D2 /* libpdfium.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D204CF95F7098FB1E9C08AFA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3CD651B758C2CD15031CD28D /* Assets.xcassets */; };
@@ -46,6 +49,7 @@
 		0269C7E635AEFB2915EFA4AF /* ImageEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageEditing.swift; sourceTree = "<group>"; };
 		0F852F39CED864BE02EA6393 /* Tools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tools.swift; sourceTree = "<group>"; };
 		10F0F587EB1AAF2B7335DB1D /* PDFium.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFium.swift; sourceTree = "<group>"; };
+		11D5DAB5444C22A8806DF29E /* CleanCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanCopy.swift; sourceTree = "<group>"; };
 		2A4ECFED9A79115C38F62CD2 /* Export.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Export.swift; sourceTree = "<group>"; };
 		34E1DE9F92CB9D03695CC327 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		3CD651B758C2CD15031CD28D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -57,10 +61,12 @@
 		8CE807045F35C32FC725B2D2 /* libpdfium.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpdfium.dylib; path = Vendor/pdfium/lib/libpdfium.dylib; sourceTree = "<group>"; };
 		9375F5C3B19684E769487991 /* MacPDF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacPDF.entitlements; sourceTree = "<group>"; };
 		9614E5762C6F85E1284F85BD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientInfoSheet.swift; sourceTree = "<group>"; };
 		B97F16243BEBBDBF3CA204AE /* MacPDFView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPDFView.swift; sourceTree = "<group>"; };
 		D0C05960E0F8894952D8C8BB /* MacPDF-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MacPDF-Bridging-Header.h"; sourceTree = "<group>"; };
 		DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSurgery.swift; sourceTree = "<group>"; };
 		E05430E6686AA9DB38B5FF0C /* TextEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextEditing.swift; sourceTree = "<group>"; };
+		E7C8E5B39806484A1929B939 /* PatientInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientInfo.swift; sourceTree = "<group>"; };
 		E9F5692142BCC3440402C057 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F1E767DCA8C42944A6967749 /* ModeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeBar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -106,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				3CD651B758C2CD15031CD28D /* Assets.xcassets */,
+				11D5DAB5444C22A8806DF29E /* CleanCopy.swift */,
 				DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */,
 				9614E5762C6F85E1284F85BD /* ContentView.swift */,
 				00B923427EE30130933ECAFF /* DocumentModel.swift */,
@@ -119,6 +126,8 @@
 				F1E767DCA8C42944A6967749 /* ModeBar.swift */,
 				75FA36805CEC1312F23E1A76 /* OCR.swift */,
 				4EA1EDDDC894F0A2332887DA /* PageTools.swift */,
+				E7C8E5B39806484A1929B939 /* PatientInfo.swift */,
+				A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */,
 				4AC24EB343E827AF3D06C31C /* PDFFile.swift */,
 				10F0F587EB1AAF2B7335DB1D /* PDFium.swift */,
 				34E1DE9F92CB9D03695CC327 /* SidebarView.swift */,
@@ -200,6 +209,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */,
 				2164948B45FA7ADB1AB8CAB4 /* ContentSurgery.swift in Sources */,
 				F1CF8E88E55E48B9256B4858 /* ContentView.swift in Sources */,
 				CA34C900CB03B2F0FDDE2B32 /* DocumentModel.swift in Sources */,
@@ -212,6 +222,8 @@
 				24223F44DD8F834A8529F821 /* PDFFile.swift in Sources */,
 				5432D8CC7274C7EADEB682D2 /* PDFium.swift in Sources */,
 				0423267A71B06B5FDE67F586 /* PageTools.swift in Sources */,
+				356E9B1712F8E0B68BFE5341 /* PatientInfo.swift in Sources */,
+				C733F645E21C345D8A6CD307 /* PatientInfoSheet.swift in Sources */,
 				4B69DBCCC4412D2ED0E429DE /* SidebarView.swift in Sources */,
 				1494AC13CBA9CF5B742222BE /* TextEditing.swift in Sources */,
 				E9F4CA7A4B47A443E92B3AA8 /* Tools.swift in Sources */,

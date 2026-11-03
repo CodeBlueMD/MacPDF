@@ -3,3 +3,4 @@
 #include "fpdf_edit.h"
 #include "fpdf_save.h"
 #include "fpdf_text.h"
+#include "fpdf_attachment.h"

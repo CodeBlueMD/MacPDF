@@ -219,6 +219,17 @@ enum ContentSurgery {
         }
     }
 
+    /// Drops the catalog's XMP /Metadata stream and the trailer's /Info dictionary (both can hold
+    /// author names, software and edit history), via an incremental update.
+    static func removingCatalogMetadata(from data: Data) -> (data: Data, removed: Bool)? {
+        guard let file = PDFFile(data: data), let rootRef = file.value(of: "Root", in: file.trailer),
+              let root = Int(rootRef.split(separator: " ").first ?? ""), let catalog = file.dictionary(of: root) else { return nil }
+        let hadMetadata = catalog.range(of: "/Metadata") != nil
+        let cleaned = catalog.replacingOccurrences(of: #"/Metadata\s+\d+\s+\d+\s+R"#, with: "", options: .regularExpression)
+        guard let updated = file.appendingObjects([(root, 0, cleaned.trimmingCharacters(in: .whitespacesAndNewlines))], dropInfo: true) else { return nil }
+        return (updated, hadMetadata)
+    }
+
     // MARK: Minimal PDF file access (classic xref table, as PDFKit writes)
 
     struct PDFFile {
@@ -241,8 +252,11 @@ enum ContentSurgery {
         }
 
         private mutating func parseXref(at offset: Int) -> [Int: Int]? {
+            // Read up to the end of the trailer, however long the table is (big documents have
+            // tens of thousands of entries).
             guard offset < bytes.count,
-                  let text = String(bytes: bytes[offset..<min(bytes.count, offset + 200_000)], encoding: .isoLatin1),
+                  let trailerAt = find(Array("startxref".utf8), from: offset),
+                  let text = String(bytes: bytes[offset..<min(bytes.count, trailerAt + 9)], encoding: .isoLatin1),
                   text.hasPrefix("xref") else { return nil }
             var table: [Int: Int] = [:]
             let lines = text.components(separatedBy: CharacterSet(charactersIn: "\r\n")).filter { !$0.isEmpty }
@@ -370,15 +384,31 @@ enum ContentSurgery {
 
         /// Appends replacement streams (uncompressed) as an incremental update.
         func appendingStreams(_ streams: [(ref: Int, gen: Int, bytes: Data)]) -> Data? {
+            var bodies: [(Int, Int, Data)] = []
+            for stream in streams {
+                var body = Data("<< /Length \(stream.bytes.count) >>\nstream\n".utf8)
+                body.append(stream.bytes)
+                body.append(Data("\nendstream".utf8))
+                bodies.append((stream.ref, stream.gen, body))
+            }
+            return appending(bodies, dropInfo: false)
+        }
+
+        /// Appends replacement objects (given as their dictionary text) as an incremental update.
+        func appendingObjects(_ objects: [(ref: Int, gen: Int, text: String)], dropInfo: Bool) -> Data? {
+            appending(objects.map { ($0.ref, $0.gen, Data($0.text.utf8)) }, dropInfo: dropInfo)
+        }
+
+        private func appending(_ objects: [(Int, Int, Data)], dropInfo: Bool) -> Data? {
             guard let root = value(of: "Root", in: trailer) else { return nil }
             var out = data
             if out.last != 0x0A { out.append(0x0A) }
             var entries: [(Int, Int, Int)] = []
-            for stream in streams {
-                entries.append((stream.ref, stream.gen, out.count))
-                out.append(Data("\(stream.ref) \(stream.gen) obj\n<< /Length \(stream.bytes.count) >>\nstream\n".utf8))
-                out.append(stream.bytes)
-                out.append(Data("\nendstream\nendobj\n".utf8))
+            for (ref, gen, body) in objects {
+                entries.append((ref, gen, out.count))
+                out.append(Data("\(ref) \(gen) obj\n".utf8))
+                out.append(body)
+                out.append(Data("\nendobj\n".utf8))
             }
             let xref = out.count
             var table = "xref\n"
@@ -386,7 +416,7 @@ enum ContentSurgery {
                 table += "\(ref) 1\n" + String(format: "%010d %05d n \n", offset, gen)
             }
             var trailerDict = "/Size \(size) /Root \(root) /Prev \(xrefOffset)"
-            if let info = value(of: "Info", in: trailer) { trailerDict += " /Info \(info)" }
+            if !dropInfo, let info = value(of: "Info", in: trailer) { trailerDict += " /Info \(info)" }
             if let id = trailer.range(of: "/ID"), let close = trailer[id.upperBound...].firstIndex(of: "]") {
                 trailerDict += " " + trailer[id.lowerBound...close]
             }

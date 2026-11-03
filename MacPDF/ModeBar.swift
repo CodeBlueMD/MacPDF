@@ -66,11 +66,14 @@ struct ModeBar: View {
                 if model.tool == .redact {
                     action("Find & Redact…", "magnifyingglass") { model.findAndRedact() }
                 }
+                action("Patient Info…", "person.text.rectangle") { model.scanForPatientInfo() }
                 action("Header & Footer", "rectangle.topthird.inset.filled") { model.showHeaderFooter = true }
             case .export:
                 ForEach(ExportKind.allCases) { kind in
                     action(kind.title, kind.symbol) { model.export(kind) }
                 }
+                gap
+                action("Clean Copy…", "checkmark.shield") { model.showCleanCopy = true }
             case .fillSign:
                 tool(.textBox, labeled: true)
                 signatureButton(labeled: true)

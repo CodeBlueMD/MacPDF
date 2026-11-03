@@ -55,8 +55,15 @@ struct ContentView: View {
         .sheet(isPresented: $model.showClearMargins) {
             ClearMarginsSheet(model: model)
         }
+        .sheet(isPresented: $model.showCleanCopy) {
+            CleanCopySheet(model: model)
+        }
         .sheet(isPresented: $model.showHeaderFooter) {
             HeaderFooterSheet(model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.patientInfoMatches != nil },
+                                    set: { if !$0 { model.patientInfoMatches = nil } })) {
+            PatientInfoSheet(model: model, matches: model.patientInfoMatches ?? [])
         }
         .sheet(isPresented: $needsPassword) {
             PasswordSheet(pdf: file.pdf) {

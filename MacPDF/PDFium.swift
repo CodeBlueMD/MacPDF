@@ -44,6 +44,19 @@ enum PDFium {
         }
     }
 
+    /// Deletes every embedded attachment from a whole document; pages are saved as they are.
+    static func removingAttachments(from data: Data) -> (data: Data, count: Int)? {
+        _ = initialized
+        return data.withUnsafeBytes { raw -> (Data, Int)? in
+            guard let doc = FPDF_LoadMemDocument64(raw.baseAddress, raw.count, nil) else { return nil }
+            defer { FPDF_CloseDocument(doc) }
+            let count = Int(FPDFDoc_GetAttachmentCount(doc))
+            guard count > 0 else { return (data, 0) }
+            for i in stride(from: count - 1, through: 0, by: -1) { FPDFDoc_DeleteAttachment(doc, Int32(i)) }
+            return save(doc).map { ($0, count) }
+        }
+    }
+
     private static func save(_ doc: FPDF_DOCUMENT) -> Data? {
         output = Data()
         var writer = FPDF_FILEWRITE()
