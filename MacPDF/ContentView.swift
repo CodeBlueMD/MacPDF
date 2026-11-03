@@ -55,6 +55,12 @@ struct ContentView: View {
         .sheet(isPresented: $model.showClearMargins) {
             ClearMarginsSheet(model: model)
         }
+        .sheet(isPresented: $model.showProfile) {
+            ProfileSheet()
+        }
+        .sheet(isPresented: Binding(get: { model.formFills != nil }, set: { if !$0 { model.formFills = nil } })) {
+            FormFillSheet(model: model, fills: model.formFills ?? [])
+        }
         .sheet(isPresented: $model.showCleanCopy) {
             CleanCopySheet(model: model)
         }

@@ -75,6 +75,20 @@ struct ModeBar: View {
                 gap
                 action("Clean Copy…", "checkmark.shield") { model.showCleanCopy = true }
             case .fillSign:
+                Menu {
+                    Button("This Page") { model.autofillForm(allPages: false) }
+                    Button("All Pages") { model.autofillForm(allPages: true) }
+                    Divider()
+                    Button("Edit My Profile…") { model.showProfile = true }
+                } label: {
+                    Label("Auto-Fill", systemImage: "wand.and.stars")
+                } primaryAction: {
+                    model.autofillForm(allPages: false)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Fill this page's form from your profile (NPI, DEA, license, address…)")
+                gap
                 tool(.textBox, labeled: true)
                 signatureButton(labeled: true)
                 tool(.date, labeled: true)

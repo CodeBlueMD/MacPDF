@@ -53,6 +53,9 @@ final class DocumentModel: ObservableObject {
     @Published var showClearMargins = false
     @Published var showHeaderFooter = false
     @Published var showCleanCopy = false
+    @Published var showProfile = false
+    /// Proposed Auto-Fill entries waiting for review; nil when the sheet is closed.
+    @Published var formFills: [FormFill]?
     /// Results of Edit → Patient Info, shown for review; nil when the sheet is closed.
     @Published var patientInfoMatches: [PatientInfoMatch]?
     /// Long-running page work (OCR, enhance, …); nil when idle.
