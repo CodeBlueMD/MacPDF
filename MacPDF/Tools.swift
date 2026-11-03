@@ -140,7 +140,6 @@ enum ShapeKind: String, CaseIterable, Identifiable {
     }
 }
 
-/// Standard PDF stamp names, which every PDF reader knows how to draw.
 enum StampKind: String, CaseIterable, Identifiable {
     case approved = "Approved"
     case notApproved = "NotApproved"
@@ -153,6 +152,15 @@ enum StampKind: String, CaseIterable, Identifiable {
     case topSecret = "TopSecret"
 
     var id: Self { self }
+
+    var color: NSColor {
+        switch self {
+        case .approved, .final: NSColor(red: 0.10, green: 0.55, blue: 0.25, alpha: 1)
+        case .notApproved, .confidential, .expired, .topSecret: NSColor(red: 0.78, green: 0.12, blue: 0.12, alpha: 1)
+        case .draft, .forComment: NSColor(red: 0.12, green: 0.32, blue: 0.75, alpha: 1)
+        case .asIs: NSColor(white: 0.35, alpha: 1)
+        }
+    }
 
     var title: String {
         switch self {

@@ -124,61 +124,57 @@ struct ModeBar: View {
         .contentShape(Rectangle())
     }
 
+    /// A tool button with a small arrow beside it for its options. A borderless SwiftUI Menu would
+    /// draw its label dimmed, making it look disabled next to the plain buttons.
+    private func splitButton<Options: View>(_ title: String, _ symbol: String, labeled: Bool, selected: Bool,
+                                            help: String, action: @escaping () -> Void,
+                                            @ViewBuilder options: () -> Options) -> some View {
+        HStack(spacing: 0) {
+            Button(action: action) { itemLabel(title, symbol, labeled: labeled) }
+                .buttonStyle(.plain)
+            Menu(content: options) { EmptyView() }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.visible)
+                .fixedSize()
+                .padding(.trailing, 6)
+        }
+        .frame(height: 30)
+        .background(selectedBackground(selected))
+        .help(help)
+    }
+
     private var shapeMenu: some View {
-        Menu {
+        splitButton("Shapes", model.shapeKind.symbol, labeled: false, selected: model.tool == .shape,
+                    help: "Shapes — \(model.shapeKind.title)") {
+            model.tool = model.tool == .shape ? .select : .shape
+        } options: {
             ForEach(ShapeKind.allCases) { kind in
                 Button { model.shapeKind = kind; model.tool = .shape } label: {
                     Label(kind.title, systemImage: kind.symbol)
                 }
             }
-        } label: {
-            Image(systemName: model.shapeKind.symbol)
-        } primaryAction: {
-            model.tool = model.tool == .shape ? .select : .shape
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .padding(.horizontal, 6)
-        .frame(height: 30)
-        .background(selectedBackground(model.tool == .shape))
-        .help("Shapes — click to draw, hold for more shapes")
     }
 
     private var stampMenu: some View {
-        Menu {
+        splitButton("Stamp", "seal", labeled: model.mode == .fillSign, selected: model.tool == .stamp,
+                    help: "Stamp: \(model.stampKind.title)") {
+            model.tool = model.tool == .stamp ? .select : .stamp
+        } options: {
             ForEach(StampKind.allCases) { kind in
                 Button(kind.title) { model.stampKind = kind; model.tool = .stamp }
             }
-        } label: {
-            Label(model.mode == .fillSign ? "Stamp" : "", systemImage: "seal")
-                .labelStyle(.titleAndIcon)
-        } primaryAction: {
-            model.tool = model.tool == .stamp ? .select : .stamp
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .padding(.horizontal, 6)
-        .frame(height: 30)
-        .background(selectedBackground(model.tool == .stamp))
-        .help("Stamp: \(model.stampKind.title) — hold to pick another")
     }
 
     private func signatureButton(labeled: Bool) -> some View {
-        Menu {
+        splitButton("Signature", "signature", labeled: labeled, selected: model.tool == .signature,
+                    help: "Signature — click the page to place it") {
+            model.useSignatureTool()
+        } options: {
             Button("Place Signature") { model.useSignatureTool() }
             Button("New Signature…") { model.showSignaturePad = true }
-        } label: {
-            Label(labeled ? "Signature" : "", systemImage: "signature")
-                .labelStyle(.titleAndIcon)
-        } primaryAction: {
-            model.useSignatureTool()
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .padding(.horizontal, 6)
-        .frame(height: 30)
-        .background(selectedBackground(model.tool == .signature))
-        .help("Signature — click the page to place it")
     }
 }
 

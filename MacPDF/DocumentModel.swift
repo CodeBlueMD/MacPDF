@@ -302,12 +302,19 @@ final class DocumentModel: ObservableObject {
         add(makeShape(from: start, to: end), to: page)
     }
 
+    /// A tinted badge with bold colored text. Built from FreeText because PDFKit draws real Stamp
+    /// annotations as an empty crossed-out box.
     func addStamp(at point: CGPoint, on page: PDFPage) {
-        let stamp = PDFAnnotation(bounds: CGRect(x: point.x - 80, y: point.y - 25, width: 160, height: 50),
-                                  forType: .stamp, withProperties: nil)
-        stamp.stampName = stampKind.rawValue
-        // On pages loaded from a file PDFKit saves stampName as "Draft" unless /Name is set directly.
-        _ = stamp.setValue("/\(stampKind.rawValue)", forAnnotationKey: PDFAnnotationKey(rawValue: "/Name"))
+        let text = stampKind.title.uppercased()
+        let font = NSFont.systemFont(ofSize: 20, weight: .heavy)
+        let size = (text as NSString).size(withAttributes: [.font: font])
+        let bounds = CGRect(x: point.x - size.width / 2 - 12, y: point.y - size.height / 2 - 6,
+                            width: size.width + 24, height: size.height + 12)
+        let stamp = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
+        Self.style(stamp, font: font, textColor: stampKind.color, background: stampKind.color.blended(withFraction: 0.88, of: .white) ?? .white)
+        stamp.alignment = .center
+        stamp.contents = text
+        stamp.tag = .stamp
         add(stamp, to: page)
     }
 
@@ -632,6 +639,7 @@ enum AnnotationTag: String {
     case redaction = "MacPDF.redaction"
     case textEdit = "MacPDF.textEdit"
     case measurement = "MacPDF.measurement"
+    case stamp = "MacPDF.stamp"
 }
 
 extension PDFAnnotation {
@@ -658,6 +666,7 @@ extension PDFAnnotation {
         case .redaction: return "Redaction"
         case .textEdit: return "Text Edit"
         case .measurement: return "Measurement"
+        case .stamp: return "Stamp"
         case nil: break
         }
         return switch subtypeName {
