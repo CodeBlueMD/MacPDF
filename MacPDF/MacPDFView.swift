@@ -9,7 +9,7 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     private var dragPage: PDFPage?
     private var dragStart: CGPoint?
     /// Edit → Text press on a paragraph: becomes a move if dragged, an edit if just clicked.
-    private var textPress: (start: CGPoint, viewStart: CGPoint, page: PDFPage, block: TextBlock, moved: Bool)?
+    private var textPress: (start: CGPoint, viewStart: CGPoint, page: PDFPage, block: TextBlock, moved: Bool, snappedOffset: CGPoint)?
 
     /// Edit → Image drag on a selected image: moving it, or resizing from a corner (0–3).
     private var imageDrag: (start: CGPoint, original: CGRect, corner: Int?, current: CGRect)?
@@ -59,8 +59,23 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
     /// Multi-line editor for Edit → Text (rewriting the page's own paragraphs).
     private var blockEditor: NSTextView?
-    private var blockCommit: ((String?) -> Void)?
+    private var blockCommit: ((String?, TextBlock) -> Void)?
     private var blockEdit: (page: PDFPage, block: TextBlock)?
+    /// Where the paragraph will go, in page coordinates; moved and resized with the box's handles.
+    private var blockFrame = CGRect.zero
+    private var blockWraps = false
+    /// Covers the paragraph's original spot while the box is moved away, so it isn't seen twice.
+    private let originalMask: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.white.cgColor
+        return view
+    }()
+    private lazy var editorChrome: EditorChrome = {
+        let chrome = EditorChrome(frame: .zero)
+        chrome.onDrag = { [weak self] part, delta, phase in self?.dragEditor(part, by: delta, phase: phase) }
+        return chrome
+    }()
 
     private func pagePoint(_ event: NSEvent) -> (PDFPage, CGPoint)? {
         let viewPoint = convert(event.locationInWindow, from: nil)
@@ -99,7 +114,7 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
                 model.editTextAnnotation(hit)
             } else if let block = TextBlock.at(point, on: page) {
                 model.selectedImage = nil
-                textPress = (point, convert(event.locationInWindow, from: nil), page, block, false)
+                textPress = (point, convert(event.locationInWindow, from: nil), page, block, false, .zero)
             } else if !beginImagePress(at: point, on: page, model: model) {
                 model.beginBlockEdit(at: point, on: page) // empty space: new text
             }
@@ -155,15 +170,19 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
             textPress = press
             let point = convert(viewPoint, to: press.page)
             let moved = press.block.rect.offsetBy(dx: point.x - press.start.x, dy: point.y - press.start.y)
-            overlay.show(NSBezierPath(rect: overlayRect(moved, on: press.page)), stroke: .controlAccentColor, width: 1.5, dashed: true)
+            let (snapped, guides) = snap(moved, on: press.page, ignoring: press.block.rect)
+            press.snappedOffset = CGPoint(x: snapped.minX - press.block.rect.minX, y: snapped.minY - press.block.rect.minY)
+            textPress = press
+            showGuides(guides, on: press.page, box: snapped)
             return
         }
         if var drag = imageDrag, let selection = model?.selectedImage {
             let point = convert(convert(event.locationInWindow, from: nil), to: selection.page)
             drag.current = Self.dragged(drag.original, corner: drag.corner, from: drag.start, to: point)
+            var guides: [(CGPoint, CGPoint)] = []
+            if drag.corner == nil { (drag.current, guides) = snap(drag.current, on: selection.page, ignoring: drag.original) }
             imageDrag = drag
-            overlay.show(NSBezierPath(rect: overlayRect(drag.current, on: selection.page)),
-                         stroke: .controlAccentColor, width: 1.5, dashed: true)
+            showGuides(guides, on: selection.page, box: drag.current)
             return
         }
         guard !redactingSelection, let page = dragPage, let model else {
@@ -185,9 +204,8 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         if let press = textPress {
             textPress = nil
             clearPreview()
-            let point = convert(convert(event.locationInWindow, from: nil), to: press.page)
             if press.moved {
-                model.moveBlock(press.block, by: CGPoint(x: point.x - press.start.x, y: point.y - press.start.y), on: press.page)
+                model.moveBlock(press.block, by: press.snappedOffset, on: press.page)
             } else {
                 model.beginBlockEdit(press.block, on: press.page)
                 placeCaret(at: press.start, on: press.page)
@@ -463,7 +481,7 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     // MARK: Paragraph editing
 
     /// Opens an editor over `block`, styled from `model.textStyle` and wrapping like the page.
-    func beginBlockEdit(_ block: TextBlock, on page: PDFPage, commit: @escaping (String?) -> Void) {
+    func beginBlockEdit(_ block: TextBlock, on page: PDFPage, commit: @escaping (String?, TextBlock) -> Void) {
         endInlineEdit()
         guard let documentView else { return }
         let editor = NSTextView(frame: .zero)
@@ -480,16 +498,21 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
             editor.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                                          height: CGFloat.greatestFiniteMagnitude)
         }
-        editor.wantsLayer = true
-        editor.layer?.borderColor = NSColor.controlAccentColor.cgColor
-        editor.layer?.borderWidth = 1
         editor.string = block.text
         editor.delegate = self
+        if #available(macOS 15.0, *) { editor.writingToolsBehavior = .none }
 
         blockEditor = editor
         blockCommit = commit
         blockEdit = (page, block)
+        blockFrame = block.rect
+        blockWraps = block.wraps
+        if block.replacesText {
+            originalMask.frame = documentView.convert(convert(block.rect.insetBy(dx: -1, dy: -1), from: page), from: self)
+            documentView.addSubview(originalMask)
+        }
         documentView.addSubview(editor)
+        documentView.addSubview(editorChrome, positioned: .above, relativeTo: editor)
         applyEditorStyle()
         window?.makeFirstResponder(editor)
         editor.setSelectedRange(NSRange(location: (block.text as NSString).length, length: 0))
@@ -523,31 +546,137 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
     /// Keeps the editor's top edge fixed and grows it to fit the text.
     private func resizeBlockEditor() {
-        guard let editor = blockEditor, let (page, block) = blockEdit, let documentView,
+        guard let editor = blockEditor, let (page, _) = blockEdit, let documentView,
               let layout = editor.layoutManager, let container = editor.textContainer else { return }
-        var frame = documentView.convert(convert(block.rect.insetBy(dx: -2, dy: -1), from: page), from: self)
-        if block.wraps { container.containerSize = NSSize(width: frame.width, height: .greatestFiniteMagnitude) }
+        var frame = documentView.convert(convert(blockFrame.insetBy(dx: -2, dy: -1), from: page), from: self)
+        container.widthTracksTextView = blockWraps
+        container.containerSize = NSSize(width: blockWraps ? frame.width : .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         layout.ensureLayout(for: container)
         let used = layout.usedRect(for: container)
-        let width = block.wraps ? frame.width : max(frame.width, used.width + 8)
+        let width = blockWraps ? frame.width : max(frame.width, used.width + 8)
         let height = max(frame.height, used.height + 2)
-        if !block.wraps, editor.alignment == .center { frame.origin.x = frame.midX - width / 2 }
+        if !blockWraps, editor.alignment == .center { frame.origin.x = frame.midX - width / 2 }
         if !documentView.isFlipped { frame.origin.y = frame.maxY - height }
         frame.size = CGSize(width: width, height: height)
         editor.frame = frame
+        editorChrome.frame = frame.insetBy(dx: -EditorChrome.pad, dy: -EditorChrome.pad)
+        editorChrome.needsDisplay = true
+    }
+
+    /// Moving the box (handle or border) or changing its width (side handles), with snapping.
+    private func dragEditor(_ part: EditorChrome.Part, by delta: CGSize, phase: EditorChrome.Phase) {
+        guard let (page, block) = blockEdit else { return }
+        if phase == .began { dragOrigin = blockFrame }
+        let scale = documentScale(for: page)
+        let dx = delta.width / scale
+        let dy = (documentView?.isFlipped ?? true) ? -delta.height / scale : delta.height / scale
+        var frame = dragOrigin
+        switch part {
+        case .move:
+            frame = frame.offsetBy(dx: dx, dy: dy)
+            let (snapped, guides) = snap(frame, on: page, ignoring: block.rect)
+            frame = snapped
+            showGuides(guides, on: page)
+        case .left:
+            frame = CGRect(x: frame.minX + dx, y: frame.minY, width: max(frame.width - dx, 24), height: frame.height)
+            blockWraps = true
+        case .right:
+            frame.size.width = max(frame.width + dx, 24)
+            blockWraps = true
+        }
+        if phase == .ended { clearPreview() }
+        blockFrame = frame
+        resizeBlockEditor()
+    }
+    private var dragOrigin = CGRect.zero
+
+    // MARK: Snapping
+
+    private final class SnapTargets {
+        let rects: [CGRect]
+        init(_ rects: [CGRect]) { self.rects = rects }
+    }
+    private static let snapCache = NSMapTable<PDFPage, SnapTargets>.weakToStrongObjects()
+
+    /// Lines of text and images on the page, for lining things up with.
+    private func snapTargets(on page: PDFPage) -> [CGRect] {
+        if let cached = Self.snapCache.object(forKey: page) { return cached.rects }
+        let lines = (page.selection(for: page.bounds(for: .mediaBox))?.selectionsByLine() ?? [])
+            .compactMap { TextBlock.Line($0, page: page)?.bounds }
+        let rects = lines + (model?.imageRects(on: page).map(\.rect) ?? [])
+        Self.snapCache.setObject(SnapTargets(rects), forKey: page)
+        return rects
+    }
+
+    /// Nudges `rect` so a left/centre/right edge or its top/bottom lines up with nearby text, images
+    /// or the page centre when within a few points. Returns guide lines (page coordinates) to draw.
+    func snap(_ rect: CGRect, on page: PDFPage, ignoring: CGRect) -> (CGRect, [(CGPoint, CGPoint)]) {
+        let threshold = 6 / max(scaleFactor, 0.1)
+        let others = snapTargets(on: page).filter { !$0.intersects(ignoring.insetBy(dx: 1, dy: 1)) }
+        let pageMid = page.bounds(for: .cropBox).midX
+
+        var best: (dx: CGFloat, x: CGFloat, target: CGRect?)? = nil
+        for (edge, value) in [(0, rect.minX), (1, rect.midX), (2, rect.maxX)] {
+            var candidates = others.map { ([$0.minX, $0.midX, $0.maxX][edge], Optional($0)) }
+            if edge == 1 { candidates.append((pageMid, nil)) }
+            for (x, target) in candidates where abs(x - value) <= threshold && abs(x - value) < abs(best?.dx ?? .infinity) {
+                best = (x - value, x, target)
+            }
+        }
+        var bestY: (dy: CGFloat, y: CGFloat, target: CGRect)? = nil
+        for value in [rect.maxY, rect.minY] {
+            for target in others {
+                for y in [target.maxY, target.minY] where abs(y - value) <= threshold && abs(y - value) < abs(bestY?.dy ?? .infinity) {
+                    bestY = (y - value, y, target)
+                }
+            }
+        }
+        var snapped = rect
+        var guides: [(CGPoint, CGPoint)] = []
+        if let best {
+            snapped.origin.x += best.dx
+            let box = page.bounds(for: .cropBox)
+            let span = best.target.map { (min($0.minY, snapped.minY), max($0.maxY, snapped.maxY)) } ?? (box.minY, box.maxY)
+            guides.append((CGPoint(x: best.x, y: span.0 - 6), CGPoint(x: best.x, y: span.1 + 6)))
+        }
+        if let bestY {
+            snapped.origin.y += bestY.dy
+            guides.append((CGPoint(x: min(bestY.target.minX, snapped.minX) - 6, y: bestY.y),
+                           CGPoint(x: max(bestY.target.maxX, snapped.maxX) + 6, y: bestY.y)))
+        }
+        return (snapped, guides)
+    }
+
+    private func showGuides(_ guides: [(CGPoint, CGPoint)], on page: PDFPage, box: CGRect? = nil) {
+        let path = NSBezierPath()
+        for (a, b) in guides {
+            path.move(to: overlayPoint(a, on: page))
+            path.line(to: overlayPoint(b, on: page))
+        }
+        if let box {
+            overlay.show(NSBezierPath(rect: overlayRect(box, on: page)), stroke: .controlAccentColor, width: 1.5, dashed: true, guides: path)
+        } else {
+            overlay.show(NSBezierPath(), guides: path)
+        }
     }
 
     private func endBlockEdit(cancel: Bool) {
         guard let editor = blockEditor else { return }
         let commit = blockCommit
+        var placed = blockEdit?.block
+        placed?.rect = blockFrame
+        placed?.wraps = blockWraps
         blockEditor = nil
         blockCommit = nil
         blockEdit = nil
         let text = editor.string.trimmingCharacters(in: .whitespacesAndNewlines)
         editor.delegate = nil
         editor.removeFromSuperview()
+        editorChrome.removeFromSuperview()
+        originalMask.removeFromSuperview()
+        clearPreview()
         window?.makeFirstResponder(self)
-        commit?(cancel ? nil : text)
+        if let placed { commit?(cancel ? nil : text, placed) }
     }
 
     func textDidChange(_ notification: Notification) {
@@ -583,7 +712,13 @@ private final class DragOverlay: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func show(_ path: NSBezierPath, stroke: NSColor? = nil, width: CGFloat = 1, dashed: Bool = false, fill: NSColor? = nil) {
+    /// Alignment guides, drawn as thin magenta lines on top.
+    private var guides: NSBezierPath?
+
+    func show(_ path: NSBezierPath, stroke: NSColor? = nil, width: CGFloat = 1, dashed: Bool = false, fill: NSColor? = nil,
+              guides: NSBezierPath? = nil) {
+        guides?.lineWidth = 1
+        self.guides = guides
         path.lineWidth = width
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
@@ -598,6 +733,7 @@ private final class DragOverlay: NSView {
         guard let path else { return }
         if let fill { fill.setFill(); path.fill() }
         if let stroke { stroke.setStroke(); path.stroke() }
+        if let guides { NSColor.systemPink.setStroke(); guides.stroke() }
     }
 }
 
@@ -623,6 +759,95 @@ private final class SelectionBox: NSView {
             NSColor.controlAccentColor.setStroke()
             dot.lineWidth = 1.5
             dot.stroke()
+        }
+    }
+}
+
+/// The frame around the paragraph being edited: a move handle at the top-left, a draggable border,
+/// and handles on the left and right edges for the width. Clicks inside pass through to the text.
+private final class EditorChrome: NSView {
+    enum Part { case move, left, right }
+    enum Phase { case began, changed, ended }
+    static let pad: CGFloat = 7
+
+    var onDrag: ((Part, CGSize, Phase) -> Void)?
+    private var dragging: (part: Part, start: NSPoint)?
+
+    private var inner: NSRect { bounds.insetBy(dx: Self.pad, dy: Self.pad) }
+    private var moveHandle: NSRect {
+        NSRect(x: 0, y: isFlipped ? 0 : bounds.maxY - 2 * Self.pad, width: 2 * Self.pad, height: 2 * Self.pad)
+    }
+    private func sideHandle(_ part: Part) -> NSRect {
+        let x = part == .left ? 0 : bounds.maxX - 2 * Self.pad
+        return NSRect(x: x, y: bounds.midY - Self.pad, width: 2 * Self.pad, height: 2 * Self.pad)
+    }
+
+    override var isFlipped: Bool { true }
+
+    private func part(at point: NSPoint) -> Part? {
+        if moveHandle.contains(point) { return .move }
+        if sideHandle(.left).contains(point) { return .left }
+        if sideHandle(.right).contains(point) { return .right }
+        // The border band moves the box; the inside belongs to the text.
+        return inner.insetBy(dx: 3, dy: 3).contains(point) ? nil : .move
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let superview else { return nil }
+        let local = convert(point, from: superview)
+        return bounds.contains(local) && part(at: local) != nil ? self : nil
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(moveHandle, cursor: .openHand)
+        addCursorRect(sideHandle(.left), cursor: .resizeLeftRight)
+        addCursorRect(sideHandle(.right), cursor: .resizeLeftRight)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let part = part(at: point) else { return }
+        dragging = (part, event.locationInWindow)
+        onDrag?(part, .zero, .began)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let dragging, let superview else { return }
+        let a = superview.convert(dragging.start, from: nil), b = superview.convert(event.locationInWindow, from: nil)
+        onDrag?(dragging.part, CGSize(width: b.x - a.x, height: b.y - a.y), .changed)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let dragging, let superview else { return }
+        let a = superview.convert(dragging.start, from: nil), b = superview.convert(event.locationInWindow, from: nil)
+        onDrag?(dragging.part, CGSize(width: b.x - a.x, height: b.y - a.y), .ended)
+        self.dragging = nil
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let accent = NSColor.controlAccentColor
+        let border = NSBezierPath(rect: inner.insetBy(dx: -1, dy: -1))
+        border.lineWidth = 1
+        border.setLineDash([4, 3], count: 2, phase: 0)
+        accent.setStroke()
+        border.stroke()
+        for rect in [sideHandle(.left), sideHandle(.right)] {
+            let dot = NSBezierPath(ovalIn: rect.insetBy(dx: 2.5, dy: 2.5))
+            NSColor.white.setFill(); dot.fill()
+            accent.setStroke(); dot.lineWidth = 1.5; dot.stroke()
+        }
+        let handle = NSBezierPath(ovalIn: moveHandle.insetBy(dx: 0.5, dy: 0.5))
+        accent.setFill(); handle.fill()
+        if let arrows = NSImage(systemSymbolName: "arrow.up.and.down.and.arrow.left.and.right", accessibilityDescription: "Move")?
+            .withSymbolConfiguration(.init(pointSize: 8, weight: .bold)) {
+            let tinted = NSImage(size: arrows.size, flipped: false) { r in
+                arrows.draw(in: r)
+                NSColor.white.set()
+                r.fill(using: .sourceAtop)
+                return true
+            }
+            tinted.draw(in: moveHandle.insetBy(dx: 3, dy: 3))
         }
     }
 }

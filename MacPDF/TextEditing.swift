@@ -154,15 +154,37 @@ extension DocumentModel {
 
     func beginBlockEdit(_ block: TextBlock, on page: PDFPage) {
         textStyle = block.style
-        pdfView.beginBlockEdit(block, on: page) { [weak self] text in
+        pageTextStyles = Self.textStyles(on: page)
+        pdfView.beginBlockEdit(block, on: page) { [weak self] text, placed in
             guard let self, let text else {
                 self?.textStyle = nil
                 return
             }
             let style = self.textStyle ?? block.style
             self.textStyle = nil
-            guard text != block.text || style != block.style else { return }
-            self.writeBlock(block, text: text, style: style, on: page)
+            guard text != block.text || style != block.style || placed.rect != block.rect else { return }
+            self.writeBlock(block, text: text, style: style, on: page, placedAt: placed)
+        }
+    }
+
+    /// The distinct font/size/color combinations used on the page, most common first, so edited
+    /// text can be matched to the text around it.
+    static func textStyles(on page: PDFPage) -> [(label: String, style: TextStyle)] {
+        let lines = (page.selection(for: page.bounds(for: .mediaBox))?.selectionsByLine() ?? [])
+            .compactMap { TextBlock.Line($0, page: page) }
+        var counts: [String: (count: Int, style: TextStyle)] = [:]
+        for line in lines {
+            let font = FontData.installed(matching: line.font, size: line.font.pointSize)
+            let size = (line.font.pointSize * 2).rounded() / 2
+            let key = "\(font.fontName)|\(size)"
+            let style = TextStyle(font: NSFont(descriptor: font.fontDescriptor, size: size) ?? font,
+                                  color: line.color, alignment: .left, lineHeight: (size * 1.2).rounded())
+            counts[key, default: (0, style)].count += 1
+        }
+        return counts.values.sorted { $0.count > $1.count }.prefix(12).map { entry in
+            let name = entry.style.font.displayName ?? entry.style.font.fontName
+            let size = entry.style.size
+            return ("\(name) · \(size == size.rounded() ? String(Int(size)) : String(format: "%.1f", size)) pt", entry.style)
         }
     }
 
@@ -178,12 +200,21 @@ extension DocumentModel {
     /// changes; PDFium then only adds the new text.
     /// Drag-to-move for a paragraph: rewrites the same text `offset` points away.
     func moveBlock(_ block: TextBlock, by offset: CGPoint, on page: PDFPage) {
-        writeBlock(block, text: block.text, style: block.style, on: page, offset: offset, actionName: "Move Text")
+        var placed = block
+        placed.rect = block.rect.offsetBy(dx: offset.x, dy: offset.y)
+        writeBlock(block, text: block.text, style: block.style, on: page, placedAt: placed, actionName: "Move Text")
     }
 
+    /// `placedAt` is where the paragraph should end up (moved and/or with a new width); defaults to
+    /// where it was.
     func writeBlock(_ block: TextBlock, text: String, style: TextStyle, on page: PDFPage,
-                    offset: CGPoint = .zero, actionName: String = "Edit Text") {
-        let lines = TextLayout.lines(text, style: style, in: block.rect, wraps: block.wraps)
+                    placedAt placed: TextBlock? = nil, actionName: String = "Edit Text") {
+        let target = placed ?? block
+        // Lay out at the original position with the target width, then shift to the target's top-left.
+        let layoutRect = CGRect(x: block.rect.minX, y: block.rect.minY,
+                                width: target.wraps ? target.rect.width : block.rect.width, height: block.rect.height)
+        let offset = CGPoint(x: target.rect.minX - block.rect.minX, y: target.rect.maxY - block.rect.maxY)
+        let lines = TextLayout.lines(text, style: style, in: layoutRect, wraps: target.wraps)
         var base = page
         var shift = CGPoint.zero
         var removeWithPDFium = false
@@ -202,10 +233,10 @@ extension DocumentModel {
             }
         }
 
-        let target = block.rect.insetBy(dx: -1, dy: -style.lineHeight * 0.25)
+        let region = block.rect.insetBy(dx: -1, dy: -style.lineHeight * 0.25)
         let edited = PDFium.edit(base) { editor in
             if removeWithPDFium {
-                let originals = editor.textObjects.filter { target.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }
+                let originals = editor.textObjects.filter { region.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }
                 if let first = originals.max(by: { $0.bounds.maxY < $1.bounds.maxY }),
                    let baseline = editor.origin(of: first), let firstLine = lines.first {
                     shift.y = baseline.y - firstLine.1.y

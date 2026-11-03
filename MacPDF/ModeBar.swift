@@ -212,8 +212,23 @@ struct TextStylePanel: View {
         HStack(spacing: 6) {
             Divider().frame(height: 20)
             Menu(style.wrappedValue.font.familyName ?? "Font") {
-                ForEach(Self.families, id: \.self) { family in
-                    Button(family) { style.wrappedValue.setFamily(family) }
+                if !model.pageTextStyles.isEmpty {
+                    Section("Match text on this page") {
+                        ForEach(model.pageTextStyles.indices, id: \.self) { i in
+                            let choice = model.pageTextStyles[i]
+                            Button(choice.label) {
+                                var matched = choice.style
+                                matched.alignment = style.wrappedValue.alignment
+                                style.wrappedValue = matched
+                            }
+                        }
+                    }
+                    Divider()
+                }
+                Section("Fonts") {
+                    ForEach(Self.families, id: \.self) { family in
+                        Button(family) { style.wrappedValue.setFamily(family) }
+                    }
                 }
             }
             .menuStyle(.borderlessButton)

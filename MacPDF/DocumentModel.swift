@@ -48,6 +48,8 @@ final class DocumentModel: ObservableObject {
     @Published var showSignaturePad = false
     /// Style of the paragraph open in the Edit → Text editor; nil when nothing is being edited.
     @Published var textStyle: TextStyle?
+    /// Styles already used on the page being edited, for "match the text around it".
+    @Published var pageTextStyles: [(label: String, style: TextStyle)] = []
     @Published var showClearMargins = false
     @Published var showHeaderFooter = false
     /// Long-running page work (OCR, enhance, …); nil when idle.
