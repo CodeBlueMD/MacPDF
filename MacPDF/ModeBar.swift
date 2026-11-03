@@ -74,6 +74,7 @@ struct ModeBar: View {
                 }
                 gap
                 action("Clean Copy…", "checkmark.shield") { model.showCleanCopy = true }
+                action("Compare…", "arrow.left.arrow.right") { model.compareWithOlderVersion() }
             case .fillSign:
                 Menu {
                     Button("This Page") { model.autofillForm(allPages: false) }
@@ -287,6 +288,12 @@ struct TextStylePanel: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+
+            Toggle(isOn: $model.pushTextBelow) {
+                Image(systemName: "arrow.down.to.line.compact")
+            }
+            .toggleStyle(.button)
+            .help("Push text below down when this paragraph gets longer (and up when shorter)")
 
             ColorPicker("Text color", selection: Binding(get: { Color(nsColor: style.wrappedValue.color) },
                                                          set: { color in

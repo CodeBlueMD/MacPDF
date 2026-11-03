@@ -195,6 +195,21 @@ extension DocumentModel {
         }
     }
 
+    /// The horizontal span to push. A single-column page (nothing printed beside the paragraph)
+    /// moves whole rows across the page, so side-by-side names or labels stay together; with text
+    /// beside it (multi-column layouts), only the paragraph's own column moves.
+    private static func pushColumn(for block: TextBlock, target: TextBlock, on page: PDFPage) -> ClosedRange<CGFloat> {
+        let column = block.rect.minX...max(block.rect.maxX, target.rect.maxX)
+        let lines = (page.selection(for: page.bounds(for: .mediaBox))?.selectionsByLine() ?? [])
+            .compactMap { TextBlock.Line($0, page: page)?.bounds }
+        let beside = lines.contains { line in
+            line.minY < block.rect.maxY && line.maxY > block.rect.minY
+                && (line.maxX < column.lowerBound - 4 || line.minX > column.upperBound + 4)
+        }
+        let box = page.bounds(for: .cropBox)
+        return beside ? column : box.minX...box.maxX
+    }
+
     /// Whether any words were given their own font, size or color.
     private static func hasRunStyling(_ content: NSAttributedString, besides style: TextStyle) -> Bool {
         var differs = false
@@ -281,6 +296,19 @@ extension DocumentModel {
             }
         }
 
+        // Keep the spacing to what follows: if the paragraph now ends lower (or higher), move the
+        // content below it in the same column by the same amount.
+        var pushed: (below: CGFloat, xs: ClosedRange<CGFloat>, dy: CGFloat)?
+        if pushTextBelow, block.replacesText, !removeWithPDFium, offset == .zero,
+           let newBottom = lines.map({ $0.origin.y + $0.font.descender }).min() {
+            let dy = (newBottom + shift.y) - block.rect.minY
+            let xs = Self.pushColumn(for: block, target: target, on: page)
+            if abs(dy) > 1, let moved = ContentSurgery.shifting(base, below: block.rect.minY + 0.5, within: xs, by: dy) {
+                base = moved
+                pushed = (block.rect.minY + 0.5, xs, dy)
+            }
+        }
+
         let region = block.rect.insetBy(dx: -1, dy: -style.lineHeight * 0.25)
         let edited = PDFium.edit(base) { editor in
             if removeWithPDFium {
@@ -310,6 +338,17 @@ extension DocumentModel {
         guard let edited else {
             message = "Couldn't rewrite this text. The PDF's text may be stored in a way MacPDF can't edit yet."
             return
+        }
+        if let pushed {
+            // Highlights, notes and other markup below move with their text.
+            let floor = page.bounds(for: .cropBox).minY + page.bounds(for: .cropBox).height * 0.08
+            for annotation in edited.annotations where annotation.bounds.maxY < pushed.below && annotation.bounds.minY > floor
+                && annotation.bounds.maxX >= pushed.xs.lowerBound && annotation.bounds.minX <= pushed.xs.upperBound {
+                annotation.bounds = annotation.bounds.offsetBy(dx: 0, dy: pushed.dy)
+            }
+            if pushed.dy < 0, let lowest = ContentSurgery.lowestContent(on: edited), lowest < page.bounds(for: .cropBox).minY {
+                showToast("Some content was pushed past the bottom of the page")
+            }
         }
         replace(page, with: edited, actionName: actionName)
     }

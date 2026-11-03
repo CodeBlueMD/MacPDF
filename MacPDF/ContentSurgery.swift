@@ -21,6 +21,101 @@ enum ContentSurgery {
         return result.map { ($0, origins) }
     }
 
+    /// Moves everything drawn below `y` in the column `xs` (text, lines and shapes, images) up or
+    /// down by `dy` page points, by adjusting only those commands' positions. Used to push content
+    /// down when an edited paragraph grows (or pull it up when it shrinks).
+    static func shifting(_ page: PDFPage, below y: CGFloat, within xs: ClosedRange<CGFloat>, by dy: CGFloat) -> PDFPage? {
+        // The footer area (page numbers, rules, running footers) stays where it is.
+        let box = page.bounds(for: .cropBox)
+        let floor = box.minY + box.height * 0.08
+        func movable(_ py: CGFloat) -> Bool { py < y && py > floor }
+        func number(_ v: CGFloat) -> String { String(format: "%.4f", abs(v) < 1e-9 ? 0 : v) }
+        /// The same page-space move expressed in the user space the command is drawn in.
+        func userDelta(_ ctm: CGAffineTransform) -> CGPoint {
+            let linear = CGAffineTransform(a: ctm.a, b: ctm.b, c: ctm.c, d: ctm.d, tx: 0, ty: 0)
+            return CGPoint(x: 0, y: dy).applying(linear.inverted())
+        }
+        func inColumn(_ x: CGFloat) -> Bool { x >= xs.lowerBound - 2 && x <= xs.upperBound + 2 }
+
+        return edit(page) { ops in
+            var changes: [(Operation, String)] = []
+            var i = 0
+            var pathStart: Int?
+            var pathPoints: [CGPoint] = []
+            while i < ops.count {
+                let op = ops[i]
+                switch op.op {
+                case "BT":
+                    // A whole text object moves if every run in it starts below and in the column.
+                    let end = ops[i...].firstIndex { $0.op == "ET" } ?? ops.count - 1
+                    let shows = ops[i...end].filter(\.isTextShow)
+                    if !shows.isEmpty, shows.allSatisfy({ movable($0.textOrigin.y) && inColumn($0.textOrigin.x) }) {
+                        let d = userDelta(op.ctm)
+                        // Shift the starting text position; later Td moves are relative to it,
+                        // and any later absolute Tm gets the same shift.
+                        changes.append((op, "BT 1 0 0 1 \(number(d.x)) \(number(d.y)) Tm"))
+                        for k in i...end where ops[k].op == "Tm" && ops[k].operands.count == 6 {
+                            let n = ops[k].operands.compactMap(\.number)
+                            guard n.count == 6 else { continue }
+                            let dk = userDelta(ops[k].ctm)
+                            changes.append((ops[k], "\(n[0]) \(n[1]) \(n[2]) \(n[3]) \(number(n[4] + dk.x)) \(number(n[5] + dk.y)) Tm"))
+                        }
+                    }
+                    i = end + 1
+                    pathStart = nil
+                    continue
+                case "m", "re":
+                    if pathStart == nil { pathStart = i; pathPoints = [] }
+                    fallthrough
+                case "l", "c", "v", "y":
+                    let n = op.operands.compactMap(\.number)
+                    if op.op == "re", n.count == 4 {
+                        pathPoints += [CGPoint(x: n[0], y: n[1]), CGPoint(x: n[0] + n[2], y: n[1] + n[3])].map { $0.applying(op.ctm) }
+                    } else {
+                        pathPoints += stride(from: 0, to: n.count - 1, by: 2).map { CGPoint(x: n[$0], y: n[$0 + 1]).applying(op.ctm) }
+                    }
+                case "h":
+                    break
+                case "S", "s", "f", "F", "f*", "B", "B*", "b", "b*":
+                    // A painted line or shape entirely below and overlapping the column moves.
+                    if let start = pathStart, !pathPoints.isEmpty,
+                       pathPoints.allSatisfy({ movable($0.y) }),
+                       pathPoints.map(\.x).max()! >= xs.lowerBound - 2, pathPoints.map(\.x).min()! <= xs.upperBound + 2 {
+                        let d = userDelta(ops[start].ctm)
+                        changes.append((ops[start], "q 1 0 0 1 \(number(d.x)) \(number(d.y)) cm \(ops[start].raw)"))
+                        changes.append((op, "\(op.raw) Q"))
+                    }
+                    pathStart = nil
+                case "n", "W", "W*":
+                    pathStart = nil // clipping paths stay put
+                case "Do":
+                    let rect = CGRect(x: 0, y: 0, width: 1, height: 1).applying(op.ctm)
+                    if rect.maxY < y, rect.minY > floor, rect.maxX >= xs.lowerBound, rect.minX <= xs.upperBound,
+                       let name = op.operands.first?.text {
+                        if let group = DocumentModel.imageGroupStart(i, in: ops) {
+                            let d = userDelta(ops[group].ctm)
+                            changes.append((ops[group], "q 1 0 0 1 \(number(d.x)) \(number(d.y)) cm"))
+                        } else {
+                            let d = userDelta(op.ctm)
+                            changes.append((op, "q 1 0 0 1 \(number(d.x)) \(number(d.y)) cm \(name) Do Q"))
+                        }
+                    }
+                    pathStart = nil
+                default:
+                    if !DocumentModel.setupOps.contains(op.op) { pathStart = nil }
+                }
+                i += 1
+            }
+            return changes
+        }
+    }
+
+    /// The lowest point where text starts on the page, to warn when content was pushed off it.
+    static func lowestContent(on page: PDFPage) -> CGFloat? {
+        (page.selection(for: page.bounds(for: .mediaBox).insetBy(dx: 0, dy: -2000))?.selectionsByLine() ?? [])
+            .map { $0.bounds(for: page).minY }.min()
+    }
+
     /// Runs `choose` over the page's commands; it returns the commands to replace (with "" to delete).
     static func edit(_ page: PDFPage, choose: ([Operation]) -> [(Operation, String)]) -> PDFPage? {
         let single = PDFDocument()
@@ -75,6 +170,8 @@ enum ContentSurgery {
         let textOrigin: CGPoint
         /// For image/form drawing (`Do`): the transform from the unit square to the page.
         let ctm: CGAffineTransform
+        /// The command as written (operands and operator).
+        let raw: String
 
         var isTextShow: Bool { ["Tj", "TJ", "'", "\""].contains(op) }
 
@@ -139,7 +236,7 @@ enum ContentSurgery {
                 ops.append(Operation(op: token, operands: operands, range: range, streamID: state.streamID,
                                      textOrigin: token == "'" || token == "\""
                                         ? CGPoint.zero.applying(state.textMatrix.concatenating(state.ctm)) : origin,
-                                     ctm: state.ctm))
+                                     ctm: state.ctm, raw: String(decoding: bytes[range], as: UTF8.self)))
                 operands = []
                 operandStart = nil
             }

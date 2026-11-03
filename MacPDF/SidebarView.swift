@@ -28,6 +28,8 @@ struct SidebarView: View {
                 SearchResultsList(model: model)
             case .assistant:
                 AssistantView(model: model, assistant: model.assistant)
+            case .compare:
+                CompareList(model: model)
             }
         }
     }

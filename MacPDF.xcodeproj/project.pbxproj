@@ -16,6 +16,7 @@
 		356E9B1712F8E0B68BFE5341 /* PatientInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C8E5B39806484A1929B939 /* PatientInfo.swift */; };
 		4B69DBCCC4412D2ED0E429DE /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34E1DE9F92CB9D03695CC327 /* SidebarView.swift */; };
 		514DCBE8D563BEC633C53385 /* libpdfium.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 8CE807045F35C32FC725B2D2 /* libpdfium.dylib */; };
+		53F5BBC23ED0B04C234B9108 /* Compare.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C1A5D9C9CC17786498CED0 /* Compare.swift */; };
 		5432D8CC7274C7EADEB682D2 /* PDFium.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F0F587EB1AAF2B7335DB1D /* PDFium.swift */; };
 		7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D5DAB5444C22A8806DF29E /* CleanCopy.swift */; };
 		7FCD90113D16FECFDB215616 /* ImageEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0269C7E635AEFB2915EFA4AF /* ImageEditing.swift */; };
@@ -64,6 +65,7 @@
 		8CE807045F35C32FC725B2D2 /* libpdfium.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpdfium.dylib; path = Vendor/pdfium/lib/libpdfium.dylib; sourceTree = "<group>"; };
 		9375F5C3B19684E769487991 /* MacPDF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacPDF.entitlements; sourceTree = "<group>"; };
 		9614E5762C6F85E1284F85BD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A0C1A5D9C9CC17786498CED0 /* Compare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compare.swift; sourceTree = "<group>"; };
 		A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientInfoSheet.swift; sourceTree = "<group>"; };
 		B97F16243BEBBDBF3CA204AE /* MacPDFView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPDFView.swift; sourceTree = "<group>"; };
 		C567DE6FF8441E6B327060DF /* FormAutofill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormAutofill.swift; sourceTree = "<group>"; };
@@ -118,6 +120,7 @@
 				3CD651B758C2CD15031CD28D /* Assets.xcassets */,
 				6E28EFDD96B736693610EDD1 /* Assistant.swift */,
 				11D5DAB5444C22A8806DF29E /* CleanCopy.swift */,
+				A0C1A5D9C9CC17786498CED0 /* Compare.swift */,
 				DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */,
 				9614E5762C6F85E1284F85BD /* ContentView.swift */,
 				00B923427EE30130933ECAFF /* DocumentModel.swift */,
@@ -217,6 +220,7 @@
 			files = (
 				956ADCA0199D047B04C1E7AA /* Assistant.swift in Sources */,
 				7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */,
+				53F5BBC23ED0B04C234B9108 /* Compare.swift in Sources */,
 				2164948B45FA7ADB1AB8CAB4 /* ContentSurgery.swift in Sources */,
 				F1CF8E88E55E48B9256B4858 /* ContentView.swift in Sources */,
 				CA34C900CB03B2F0FDDE2B32 /* DocumentModel.swift in Sources */,

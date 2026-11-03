@@ -48,12 +48,19 @@ final class DocumentModel: ObservableObject {
     @Published var showSignaturePad = false
     /// Style of the paragraph open in the Edit → Text editor; nil when nothing is being edited.
     @Published var textStyle: TextStyle?
+    /// Edit → Text: move what's below a paragraph when it gets longer or shorter. On by default.
+    @Published var pushTextBelow = UserDefaults.standard.object(forKey: "MacPDF.pushTextBelow") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(pushTextBelow, forKey: "MacPDF.pushTextBelow") }
+    }
     /// Styles already used on the page being edited, for "match the text around it".
     @Published var pageTextStyles: [(label: String, style: TextStyle)] = []
     @Published var showClearMargins = false
     @Published var showHeaderFooter = false
     @Published var showCleanCopy = false
     @Published var showProfile = false
+    /// Differences from an older version (Compare); nil when not comparing.
+    @Published var comparison: [VersionChange]?
+    @Published var comparedWith: String?
     /// Proposed Auto-Fill entries waiting for review; nil when the sheet is closed.
     @Published var formFills: [FormFill]?
     /// Results of Edit → Patient Info, shown for review; nil when the sheet is closed.

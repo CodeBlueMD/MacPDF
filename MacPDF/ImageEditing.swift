@@ -108,12 +108,12 @@ extension DocumentModel {
     }
 
     /// Commands that only set up how the image is drawn (position, clip, state, tags), not draw anything.
-    private static let setupOps: Set<String> = ["q", "Q", "cm", "re", "m", "l", "c", "v", "y", "h", "W", "W*", "n", "gs",
+    static let setupOps: Set<String> = ["q", "Q", "cm", "re", "m", "l", "c", "v", "y", "h", "W", "W*", "n", "gs",
                                                 "w", "J", "j", "M", "d", "ri", "i", "BDC", "BMC", "EMC", "MP", "DP"]
 
     /// The outermost `q` whose group contains the image and nothing else that draws, so transforming
     /// the group moves the image together with any clip set up for it.
-    private static func imageGroupStart(_ doIndex: Int, in ops: [ContentSurgery.Operation]) -> Int? {
+    static func imageGroupStart(_ doIndex: Int, in ops: [ContentSurgery.Operation]) -> Int? {
         var candidates: [Int] = []
         var depth = 0
         var k = doIndex - 1

@@ -29,6 +29,7 @@ Highlight, underline and strikethrough (select text to apply) · pen · eraser �
   - **Match the page** — the font menu lists the font and size combinations already used on the page, so edited text can match its neighbors in one click.
   - **Move and resize** — drag a paragraph to move it, or use the open box's move handle and border; the side handles change its width and the text rewraps.
   - **Alignment guides** — text and pictures snap to the edges and centers of other text, images and the page, with pink guide lines.
+  - **Push text below** (on by default, ⤓ button) — when a paragraph gets longer or shorter, everything below it moves by the same amount, so the spacing stays the same. Whole rows move together on single-column pages; on multi-column pages only that column moves. The footer area stays put.
   - Click empty space to add new text.
 - **Image** — click a picture (with either the Text or Image tool) to select it, drag to move, drag a corner to resize, and rotate, replace, export or delete it. *Add Image…* places a new one.
 - **Link** — drag a box and attach a web address.
@@ -44,6 +45,8 @@ Highlight, underline and strikethrough (select text to apply) · pen · eraser �
 ![Export tools](docs/screenshots/toolbar-export.png)
 
 Word (.docx, text with fonts and styles) · Excel (.csv, split into columns where the PDF has gaps) · plain text · one PNG image per page.
+
+**Compare…** opens an older version of the document and shows what changed: added text is highlighted in green on the page, and a sidebar list shows every addition and removal by page.
 
 **Clean Copy…** saves a copy that's safe to share, without what people can't see on the page: document properties (author, title, software, dates), embedded XMP metadata, comments and markup, attached files, and optionally links. It tells you what it removed; your open document isn't changed.
 
@@ -77,7 +80,7 @@ Requires macOS 26 or later with Apple Intelligence turned on.
 
 ### Also
 - Tabs: each PDF opens as a tab in the same window.
-- Sidebar: page thumbnails, table of contents, a list of every annotation, and search results.
+- Sidebar: page thumbnails, table of contents, a list of every annotation, search results, the AI assistant and version comparison.
 - Search runs in the background with every match highlighted.
 - Pages: insert from other PDFs (merge), insert blank pages, rotate, delete.
 - Password-protected PDFs, printing, and full undo/redo (<kbd>⌘</kbd><kbd>Z</kbd>) for every change.
@@ -143,11 +146,12 @@ The app is ad-hoc signed for local use. To share it with other Macs, sign it wit
 | `PatientInfo.swift`, `PatientInfoSheet.swift` | Finding patient identifiers and the review list |
 | `FormAutofill.swift` | My Profile, finding form labels and blanks, Auto-Fill review |
 | `Assistant.swift` | On-device search, questions and summaries |
+| `Compare.swift` | Word-by-word comparison with an older version |
 | `ContentView.swift`, `ModeBar.swift`, `SidebarView.swift` | The interface |
 
 ## Limitations
 
-- **Edit → Text** edits one paragraph at a time. When a paragraph gets longer it grows into the text below rather than pushing it down (drag the next paragraph to make room). Text inside embedded forms or unusual encodings falls back to a full-page rewrite, which can slightly change spacing elsewhere on that page.
+- **Edit → Text** edits one paragraph at a time. Content pushed past the bottom of a page doesn't flow onto the next page. Text inside embedded forms or unusual encodings falls back to a full-page rewrite, which can slightly change spacing elsewhere on that page.
 - **Patient Info** and **Auto-Fill** use pattern matching and Apple's on-device language model; always review the list before redacting or filling.
 - **AI assistant** answers come only from the passages it finds and can still be wrong; check the cited page.
 - Redacted, enhanced or margin-cleared pages become high-resolution images with an OCR text layer; selecting text on them is slightly less precise than on the original.
