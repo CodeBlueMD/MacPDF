@@ -38,10 +38,15 @@ struct ContentView: View {
         .background(WindowTabbing())
         .onAppear { model.undoManager = undoManager }
         .onChange(of: undoManager) { _, manager in model.undoManager = manager }
+        .onChange(of: model.textStyle) { _, _ in model.pdfView.applyEditorStyle() }
+        .onAppear { file.willSave = { [weak model] in model?.pdfView.endInlineEdit() } }
         .onChange(of: model.tool) { _, tool in
             model.pdfView.endInlineEdit()
             model.pdfView.window?.invalidateCursorRects(for: model.pdfView)
-            if tool != .image { model.pendingImage = nil }
+            if tool != .image {
+                model.pendingImage = nil
+                model.selectedImage = nil
+            }
         }
         .sheet(item: $model.noteEdit) { edit in
             NoteEditor(edit: edit, model: model)
@@ -51,6 +56,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showClearMargins) {
             ClearMarginsSheet(model: model)
+        }
+        .sheet(isPresented: $model.showHeaderFooter) {
+            HeaderFooterSheet(model: model)
         }
         .sheet(isPresented: $needsPassword) {
             PasswordSheet(pdf: file.pdf) {
@@ -92,8 +100,9 @@ struct ContentView: View {
     private var toolHint: String? {
         switch model.tool {
         case .redact: "Select text or drag a box to redact it. The content underneath is permanently removed."
-        case .editText: "Click a line of text to change it."
-        case .image: "Click or drag on the page to place the image."
+        case .editText: "Click any text to edit it, or empty space to add text. Click outside the box to finish; Esc cancels."
+        case .image where model.pendingImage != nil: "Click or drag on the page to place the image."
+        case .image: "Click an image to select it. Drag to move, drag a corner to resize, Delete to remove."
         case .link: "Drag a box over the area to link."
         case .crop: "Drag a box around the part to keep."
         case .snapshot: "Drag a box to copy that area as an image."

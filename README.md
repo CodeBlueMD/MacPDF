@@ -5,7 +5,7 @@
 <h1 align="center">MacPDF</h1>
 
 <p align="center">
-  A fast, native PDF editor for macOS. Annotate, edit, redact, sign, scan and export — built entirely on Apple's PDFKit and Vision, with no third-party dependencies.
+  A fast, native PDF editor for macOS. Annotate, edit, redact, sign, scan and export — built on Apple's PDFKit and Vision, with PDFium for rewriting page content.
 </p>
 
 <p align="center">
@@ -24,10 +24,11 @@ Highlight, underline and strikethrough (select text to apply) · pen · eraser �
 ### Edit
 ![Edit tools](docs/screenshots/toolbar-edit.png)
 
-- **Text** — click a line of text and retype it.
-- **Image** — place a picture anywhere on the page.
+- **Text** — click any paragraph and edit it like a word processor: the text reflows as you type, in the original font, size and color. A panel lets you change the font, size, bold/italic, alignment and color. Click empty space to add new text. The words are rewritten in the PDF itself, not layered on top.
+- **Image** — click an image on the page to select it, drag to move, drag a corner to resize, and rotate, replace, export or delete it. *Add Image…* places a new one.
 - **Link** — drag a box and attach a web address.
-- **Redact** — select text or drag a box; it turns into a solid block in the color you pick, and the content underneath is **permanently removed** from the file.
+- **Redact** — select text or drag a box; it turns into a solid block in the color you pick, and the content underneath is **permanently removed** from the file. *Find & Redact…* removes every match of a word or number at once.
+- **Header & Footer** — add text and page numbers (“Page {page} of {pages}”) to every page.
 
 <p align="center">
   <img src="docs/screenshots/redaction.png" alt="An account number redacted with a solid black box">
@@ -64,6 +65,15 @@ Distance and area, labeled in inches and centimeters.
 - Pages: insert from other PDFs (merge), insert blank pages, rotate, delete.
 - Password-protected PDFs, printing, and full undo/redo (<kbd>⌘</kbd><kbd>Z</kbd>) for every change.
 
+## How editing works
+
+Editing a paragraph or moving an image changes only that part of the page:
+
+1. MacPDF reads the page's drawing commands and removes just the ones that draw the paragraph (or wraps the image's command in a new position). Every other byte of the page stays as it was.
+2. The new text is laid out with the paragraph's own font, size, spacing and alignment, and written into the page with [PDFium](https://pdfium.googlesource.com/pdfium/), embedding the full font so any character you type has a glyph.
+
+In testing, a pixel-by-pixel comparison of the page outside the edited paragraph shows no difference beyond ordinary re-save noise — the same result as PDF Expert.
+
 ## How redaction works
 
 Covering text with a black rectangle doesn't remove it — the words are still in the file and can be copied out. MacPDF removes them for real:
@@ -79,12 +89,14 @@ Undo brings back the original page. Pages you don't redact are never touched.
 
 - macOS 14 Sonoma or later
 - To build: Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+- PDFium is downloaded by `scripts/fetch-pdfium.sh` (a pinned, checksum-verified build from [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries), MIT/BSD licensed)
 
 ## Building
 
 ```bash
 git clone https://github.com/CodeBlueMD/MacPDF.git
 cd MacPDF
+./scripts/fetch-pdfium.sh
 xcodegen generate
 xcodebuild -scheme MacPDF -configuration Release -derivedDataPath build build
 open build/Build/Products/Release/MacPDF.app
@@ -105,12 +117,16 @@ The app is ad-hoc signed for local use. To share it with other Macs, sign it wit
 | `MacPDFView.swift` | PDFView subclass: mouse handling for every tool, drag previews, inline text editing |
 | `PageTools.swift` | Redaction, image/link placement, scan tools, measuring |
 | `OCR.swift` | Page rendering, Vision text recognition, searchable page rebuilding |
+| `TextEditing.swift` | Finding paragraphs, laying out edited text, writing it into the page |
+| `ContentSurgery.swift` | Removing or repositioning individual drawing commands without touching the rest of the page |
+| `PDFium.swift` | PDFium wrapper: adding text with embedded fonts, image objects, saving |
+| `ImageEditing.swift` | Selecting, moving, resizing, rotating, replacing and deleting page images |
 | `Export.swift` | Word, Excel, text and image export |
 | `ContentView.swift`, `ModeBar.swift`, `SidebarView.swift` | The interface |
 
 ## Limitations
 
-- **Edit → Text** draws your new text over the original line rather than rewriting the PDF's own text, which PDFKit doesn't support. The old text remains underneath; redact the line first if it must be gone.
+- **Edit → Text** edits one paragraph at a time with a single style for the whole paragraph (no mixed bold words inside it yet). Text inside embedded forms or unusual encodings falls back to a full-page rewrite, which can slightly change spacing elsewhere on that page.
 - Redacted, enhanced or margin-cleared pages become high-resolution images with an OCR text layer; selecting text on them is slightly less precise than on the original.
 - Export to Excel produces CSV; Word export keeps text and styling but not exact page layout. There is no PowerPoint export.
 - OCR works best on upright pages — rotate sideways scans first.

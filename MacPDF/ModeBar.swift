@@ -47,10 +47,26 @@ struct ModeBar: View {
                 tool(.snapshot)
             case .edit:
                 tool(.editText, labeled: true)
-                action("Image", "photo") { model.chooseImage() }
-                    .background(selectedBackground(model.tool == .image))
+                if model.textStyle != nil {
+                    TextStylePanel(model: model)
+                }
+                tool(.image, labeled: true)
+                if model.tool == .image {
+                    action("Add Image…", "plus") { model.chooseImage() }
+                    if model.selectedImage != nil {
+                        action("Rotate Left", "rotate.left") { model.rotateSelectedImage(by: 90) }
+                        action("Rotate Right", "rotate.right") { model.rotateSelectedImage(by: -90) }
+                        action("Replace…", "photo.badge.arrow.down") { model.replaceSelectedImage() }
+                        action("Export…", "square.and.arrow.up") { model.exportSelectedImage() }
+                        action("Delete", "trash") { model.deleteSelectedImage() }
+                    }
+                }
                 tool(.link, labeled: true)
                 tool(.redact, labeled: true)
+                if model.tool == .redact {
+                    action("Find & Redact…", "magnifyingglass") { model.findAndRedact() }
+                }
+                action("Header & Footer", "rectangle.topthird.inset.filled") { model.showHeaderFooter = true }
             case .export:
                 ForEach(ExportKind.allCases) { kind in
                     action(kind.title, kind.symbol) { model.export(kind) }
@@ -175,6 +191,110 @@ struct ModeBar: View {
             Button("Place Signature") { model.useSignatureTool() }
             Button("New Signature…") { model.showSignaturePad = true }
         }
+    }
+}
+
+/// Font, size, bold/italic, alignment and color for the paragraph being edited.
+struct TextStylePanel: View {
+    @ObservedObject var model: DocumentModel
+
+    private static let families = ["Helvetica", "Helvetica Neue", "Arial", "Arial Narrow", "Avenir", "Calibri",
+                                   "Cambria", "Courier New", "Garamond", "Georgia", "Gill Sans", "Menlo",
+                                   "Palatino", "Times New Roman", "Verdana"]
+        .filter { NSFontManager.shared.availableFontFamilies.contains($0) }
+
+    private var style: Binding<TextStyle> {
+        Binding(get: { model.textStyle ?? TextStyle(font: .systemFont(ofSize: 12), color: .black, alignment: .left, lineHeight: 14) },
+                set: { model.textStyle = $0 })
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Divider().frame(height: 20)
+            Menu(style.wrappedValue.font.familyName ?? "Font") {
+                ForEach(Self.families, id: \.self) { family in
+                    Button(family) { style.wrappedValue.setFamily(family) }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Font")
+
+            Stepper(value: Binding(get: { style.wrappedValue.size },
+                                   set: { new in
+                                       // Keep the line spacing in proportion to the size.
+                                       let ratio = style.wrappedValue.lineHeight / max(style.wrappedValue.size, 1)
+                                       style.wrappedValue.size = new
+                                       style.wrappedValue.lineHeight = new * ratio
+                                   }),
+                    in: 4...200, step: 1) {
+                Text("\(Int(style.wrappedValue.size.rounded())) pt").monospacedDigit()
+            }
+            .fixedSize()
+            .help("Size")
+
+            Toggle(isOn: Binding(get: { style.wrappedValue.isBold }, set: { _ in style.wrappedValue.toggle(.boldFontMask) })) {
+                Image(systemName: "bold")
+            }
+            .toggleStyle(.button)
+            .help("Bold")
+            Toggle(isOn: Binding(get: { style.wrappedValue.isItalic }, set: { _ in style.wrappedValue.toggle(.italicFontMask) })) {
+                Image(systemName: "italic")
+            }
+            .toggleStyle(.button)
+            .help("Italic")
+
+            Picker("Alignment", selection: Binding(get: { style.wrappedValue.alignment }, set: { style.wrappedValue.alignment = $0 })) {
+                Image(systemName: "text.alignleft").tag(NSTextAlignment.left)
+                Image(systemName: "text.aligncenter").tag(NSTextAlignment.center)
+                Image(systemName: "text.alignright").tag(NSTextAlignment.right)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            ColorPicker("Text color", selection: Binding(get: { Color(nsColor: style.wrappedValue.color) },
+                                                         set: { style.wrappedValue.color = NSColor($0) }),
+                        supportsOpacity: false)
+                .labelsHidden()
+                .help("Text color")
+        }
+    }
+}
+
+/// Edit → Header & Footer.
+struct HeaderFooterSheet: View {
+    @ObservedObject var model: DocumentModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var settings = DocumentModel.HeaderFooter()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Header & Footer").font(.headline)
+            TextField("Header (optional)", text: $settings.header)
+            TextField("Footer", text: $settings.footer)
+            Text("Use {page} and {pages} for page numbers, e.g. “Page {page} of {pages}”.")
+                .font(.caption).foregroundStyle(.secondary)
+            Picker("Position", selection: $settings.alignment) {
+                Text("Left").tag(NSTextAlignment.left)
+                Text("Center").tag(NSTextAlignment.center)
+                Text("Right").tag(NSTextAlignment.right)
+            }
+            .pickerStyle(.segmented)
+            Stepper("Size: \(Int(settings.size)) pt", value: $settings.size, in: 6...24)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Add to All Pages") {
+                    dismiss()
+                    model.addHeaderFooter(settings)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(settings.header.isEmpty && settings.footer.isEmpty)
+            }
+        }
+        .padding()
+        .frame(width: 380)
     }
 }
 

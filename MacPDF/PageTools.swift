@@ -277,3 +277,74 @@ extension DocumentModel {
         }
     }
 }
+
+// MARK: Find & Redact, Header & Footer
+
+extension DocumentModel {
+    /// Redacts every occurrence of a word or phrase in the document.
+    func findAndRedact() {
+        let alert = NSAlert()
+        alert.messageText = "Find & Redact"
+        alert.informativeText = "Every match is permanently removed."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "Word, name or number"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Redact All")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let query = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return }
+        let matches = pdf.findString(query, withOptions: [.caseInsensitive])
+        guard !matches.isEmpty else {
+            message = "No matches for “\(query)”."
+            return
+        }
+        matches.forEach(redact)
+        showToast("Redacted \(matches.count) match\(matches.count == 1 ? "" : "es")")
+    }
+
+    struct HeaderFooter {
+        var header = ""
+        var footer = "Page {page} of {pages}"
+        var alignment: NSTextAlignment = .center
+        var size: CGFloat = 10
+        var margin: CGFloat = 30
+    }
+
+    /// Writes the header and footer into every page's content. `{page}` and `{pages}` become numbers.
+    func addHeaderFooter(_ settings: HeaderFooter) {
+        let pages = (0..<pdf.pageCount).compactMap(pdf.page(at:))
+        let total = pages.count
+        let font = NSFont(name: "Helvetica", size: settings.size) ?? .systemFont(ofSize: settings.size)
+        processPages(pages, title: "Adding header & footer", actionName: "Header & Footer") { [pdf] page in
+            await Task.yield()
+            let number = pdf.index(for: page) + 1
+            let box = page.bounds(for: .cropBox)
+            func text(_ template: String) -> String {
+                template.replacingOccurrences(of: "{page}", with: "\(number)").replacingOccurrences(of: "{pages}", with: "\(total)")
+            }
+            func x(for string: String) -> CGFloat {
+                let width = (string as NSString).size(withAttributes: [.font: font]).width
+                switch settings.alignment {
+                case .left: return box.minX + settings.margin * 1.5
+                case .right: return box.maxX - settings.margin * 1.5 - width
+                default: return box.midX - width / 2
+                }
+            }
+            return PDFium.edit(page) { editor in
+                guard let pdfFont = editor.load(font) else { return false }
+                let header = text(settings.header), footer = text(settings.footer)
+                if !header.isEmpty {
+                    editor.addText(header, font: pdfFont, size: settings.size, color: .darkGray,
+                                   at: CGPoint(x: x(for: header), y: box.maxY - settings.margin - font.ascender))
+                }
+                if !footer.isEmpty {
+                    editor.addText(footer, font: pdfFont, size: settings.size, color: .darkGray,
+                                   at: CGPoint(x: x(for: footer), y: box.minY + settings.margin))
+                }
+                return true
+            }
+        }
+    }
+}

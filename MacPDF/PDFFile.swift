@@ -7,6 +7,8 @@ final class PDFFile: ReferenceFileDocument {
     static var readableContentTypes: [UTType] { [.pdf] }
 
     let pdf: PDFDocument
+    /// Commits any edit still open in the window before the file is written.
+    var willSave: (() -> Void)?
 
     /// File > New creates a single blank US Letter page.
     init() {
@@ -25,6 +27,9 @@ final class PDFFile: ReferenceFileDocument {
     }
 
     func snapshot(contentType: UTType) throws -> Data {
+        // Saves and autosaves can run off the main thread, where touching the editor views crashes.
+        // Open edits are committed on the main thread before saving starts (see MacPDFView).
+        if Thread.isMainThread { willSave?() }
         guard let data = pdf.dataRepresentation() else {
             throw CocoaError(.fileWriteUnknown)
         }

@@ -13,11 +13,19 @@ targets:
     type: application
     platform: macOS
     sources: [MacPDF]
+    dependencies:
+      - framework: Vendor/pdfium/lib/libpdfium.dylib
+        embed: true
+        codeSign: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.suthak.MacPDF
         PRODUCT_NAME: MacPDF
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: MacPDF/MacPDF-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/pdfium/include
+        LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/pdfium/lib
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO

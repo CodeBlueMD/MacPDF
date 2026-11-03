@@ -35,6 +35,10 @@ final class DocumentModel: ObservableObject {
     @Published var stampKind: StampKind = .approved
     /// Image chosen for the Image tool, placed on the next click or drag.
     @Published var pendingImage: NSImage?
+    /// Image on the page selected with Edit → Image.
+    @Published var selectedImage: ImageSelection? {
+        didSet { pdfView.updateImageSelection() }
+    }
 
     @Published var sidebarMode: SidebarMode = .thumbnails
     @Published var currentPageIndex = 0
@@ -42,7 +46,10 @@ final class DocumentModel: ObservableObject {
     @Published var scale: CGFloat = 1
     @Published var noteEdit: NoteEdit?
     @Published var showSignaturePad = false
+    /// Style of the paragraph open in the Edit → Text editor; nil when nothing is being edited.
+    @Published var textStyle: TextStyle?
     @Published var showClearMargins = false
+    @Published var showHeaderFooter = false
     /// Long-running page work (OCR, enhance, …); nil when idle.
     @Published var progress: TaskProgress?
     @Published var message: String?
@@ -83,6 +90,7 @@ final class DocumentModel: ObservableObject {
             guard let self else { return }
             self.scale = self.pdfView.scaleFactor
             self.pdfView.endInlineEdit()
+            self.pdfView.updateImageSelection()
         })
         observers.append(center.addObserver(forName: .PDFViewAnnotationHit, object: pdfView, queue: .main) { [weak self] note in
             guard let self, self.tool == .select,
@@ -340,29 +348,7 @@ final class DocumentModel: ObservableObject {
         add(annotation, to: page)
     }
 
-    // MARK: Text
-
-    /// Replaces a line of the page's own text. The new text is a FreeText annotation drawn with
-    /// an opaque background over the original; redacting the line first removes the original.
-    func beginLineEdit(_ line: PDFSelection, on page: PDFPage) {
-        let original = (line.string ?? "").trimmingCharacters(in: .newlines)
-        let bounds = line.bounds(for: page)
-        guard !original.isEmpty, bounds.width > 0 else { return }
-
-        let attributes = line.attributedString.flatMap { $0.length > 0 ? $0.attributes(at: 0, effectiveRange: nil) : nil }
-        let font = (attributes?[.font] as? NSFont) ?? .systemFont(ofSize: max(bounds.height * 0.8, 6))
-        let textColor = (attributes?[.foregroundColor] as? NSColor) ?? .black
-
-        pdfView.beginInlineEdit(pageRect: bounds, on: page, text: original, font: font) { [weak self] text in
-            guard let self, let text, text != original else { return }
-            let annotation = PDFAnnotation(bounds: Self.fit(bounds, text: text, font: font),
-                                           forType: .freeText, withProperties: nil)
-            Self.style(annotation, font: font, textColor: textColor, background: .white)
-            annotation.tag = .textEdit
-            annotation.contents = text
-            self.add(annotation, to: page)
-        }
-    }
+    // MARK: Text annotations (Annotate → Text; Edit → Text rewrites page content, see TextEditing.swift)
 
     func addTextBox(at point: CGPoint, on page: PDFPage) {
         let font = NSFont(name: "Helvetica", size: 14) ?? .systemFont(ofSize: 14)
@@ -499,6 +485,7 @@ final class DocumentModel: ObservableObject {
         if autoScales { pdfView.autoScales = true } else { pdfView.scaleFactor = scale }
         pdfView.highlightedSelections = highlights
         if let place, place.page?.document === pdf { pdfView.go(to: place) }
+        pdfView.updateImageSelection()
         pagesVersion += 1
     }
 
