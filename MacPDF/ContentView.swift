@@ -18,7 +18,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(model: model)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 360)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 460)
         } detail: {
             VStack(spacing: 0) {
                 ModeBar(model: model)

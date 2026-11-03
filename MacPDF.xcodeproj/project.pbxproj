@@ -20,6 +20,7 @@
 		7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D5DAB5444C22A8806DF29E /* CleanCopy.swift */; };
 		7FCD90113D16FECFDB215616 /* ImageEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0269C7E635AEFB2915EFA4AF /* ImageEditing.swift */; };
 		847F3EC8A0D9FCAA04A23202 /* Export.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4ECFED9A79115C38F62CD2 /* Export.swift */; };
+		956ADCA0199D047B04C1E7AA /* Assistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E28EFDD96B736693610EDD1 /* Assistant.swift */; };
 		AD19ADC4EAA2399246971C2E /* ModeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E767DCA8C42944A6967749 /* ModeBar.swift */; };
 		BCA2B7A7523FB67D93C50BF4 /* OCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FA36805CEC1312F23E1A76 /* OCR.swift */; };
 		C733F645E21C345D8A6CD307 /* PatientInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */; };
@@ -57,6 +58,7 @@
 		4AC24EB343E827AF3D06C31C /* PDFFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFFile.swift; sourceTree = "<group>"; };
 		4EA1EDDDC894F0A2332887DA /* PageTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageTools.swift; sourceTree = "<group>"; };
 		67ABC9339DEB72829F1157EF /* MacPDF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacPDF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E28EFDD96B736693610EDD1 /* Assistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assistant.swift; sourceTree = "<group>"; };
 		75FA36805CEC1312F23E1A76 /* OCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCR.swift; sourceTree = "<group>"; };
 		76BD6DA84E963C0BBC6C27B7 /* MacPDFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPDFApp.swift; sourceTree = "<group>"; };
 		8CE807045F35C32FC725B2D2 /* libpdfium.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpdfium.dylib; path = Vendor/pdfium/lib/libpdfium.dylib; sourceTree = "<group>"; };
@@ -114,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				3CD651B758C2CD15031CD28D /* Assets.xcassets */,
+				6E28EFDD96B736693610EDD1 /* Assistant.swift */,
 				11D5DAB5444C22A8806DF29E /* CleanCopy.swift */,
 				DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */,
 				9614E5762C6F85E1284F85BD /* ContentView.swift */,
@@ -212,6 +215,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				956ADCA0199D047B04C1E7AA /* Assistant.swift in Sources */,
 				7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */,
 				2164948B45FA7ADB1AB8CAB4 /* ContentSurgery.swift in Sources */,
 				F1CF8E88E55E48B9256B4858 /* ContentView.swift in Sources */,

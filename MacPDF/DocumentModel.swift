@@ -73,6 +73,9 @@ final class DocumentModel: ObservableObject {
     @Published var results: [PDFSelection] = []
     @Published var resultIndex = 0
 
+    /// Ask-and-summarize, on-device; created when the Assistant tab is first opened.
+    private(set) lazy var assistant = Assistant(document: self)
+
     var burnTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var burnTokens: [ObjectIdentifier: BurnToken] = [:]
     private var searchTask: Task<Void, Never>?

@@ -26,6 +26,8 @@ struct SidebarView: View {
                 AnnotationList(model: model)
             case .search:
                 SearchResultsList(model: model)
+            case .assistant:
+                AssistantView(model: model, assistant: model.assistant)
             }
         }
     }

@@ -174,7 +174,7 @@ enum StampKind: String, CaseIterable, Identifiable {
 }
 
 enum SidebarMode: String, CaseIterable, Identifiable {
-    case thumbnails, outline, annotations, search
+    case thumbnails, outline, annotations, search, assistant
     var id: Self { self }
     var symbol: String {
         switch self {
@@ -182,6 +182,7 @@ enum SidebarMode: String, CaseIterable, Identifiable {
         case .outline: "list.bullet.indent"
         case .annotations: "highlighter"
         case .search: "magnifyingglass"
+        case .assistant: "sparkles"
         }
     }
 }
