@@ -24,11 +24,17 @@ Highlight, underline and strikethrough (select text to apply) · pen · eraser �
 ### Edit
 ![Edit tools](docs/screenshots/toolbar-edit.png)
 
-- **Text** — click any paragraph and edit it like a word processor: the text reflows as you type, in the original font, size and color. A panel lets you change the font, size, bold/italic, alignment and color. Click empty space to add new text. The words are rewritten in the PDF itself, not layered on top.
-- **Image** — click an image on the page to select it, drag to move, drag a corner to resize, and rotate, replace, export or delete it. *Add Image…* places a new one.
+- **Text** — click any paragraph and edit it like a word processor: the text reflows as you type, in the original font, size and color. The words are rewritten in the PDF itself, not layered on top.
+  - **Style words or whole paragraphs** — select words and use bold, italic, size or color on just them; with nothing selected, the change applies to the paragraph. Font and alignment apply to the paragraph.
+  - **Match the page** — the font menu lists the font and size combinations already used on the page, so edited text can match its neighbors in one click.
+  - **Move and resize** — drag a paragraph to move it, or use the open box's move handle and border; the side handles change its width and the text rewraps.
+  - **Alignment guides** — text and pictures snap to the edges and centers of other text, images and the page, with pink guide lines.
+  - Click empty space to add new text.
+- **Image** — click a picture (with either the Text or Image tool) to select it, drag to move, drag a corner to resize, and rotate, replace, export or delete it. *Add Image…* places a new one.
 - **Link** — drag a box and attach a web address.
 - **Redact** — select text or drag a box; it turns into a solid block in the color you pick, and the content underneath is **permanently removed** from the file. *Find & Redact…* removes every match of a word or number at once.
 - **Header & Footer** — add text and page numbers (“Page {page} of {pages}”) to every page.
+- **Patient Info…** — scans every page on this Mac for names, dates of birth and other dates, medical record and account numbers, Social Security numbers, phone and fax numbers, emails and addresses. You review them in a checklist, grouped by type with page numbers, then redact the ones you choose in one step.
 
 <p align="center">
   <img src="docs/screenshots/redaction.png" alt="An account number redacted with a solid black box">
@@ -39,10 +45,14 @@ Highlight, underline and strikethrough (select text to apply) · pen · eraser �
 
 Word (.docx, text with fonts and styles) · Excel (.csv, split into columns where the PDF has gaps) · plain text · one PNG image per page.
 
+**Clean Copy…** saves a copy that's safe to share, without what people can't see on the page: document properties (author, title, software, dates), embedded XMP metadata, comments and markup, attached files, and optionally links. It tells you what it removed; your open document isn't changed.
+
 ### Fill & Sign
 ![Fill & Sign tools](docs/screenshots/toolbar-fillsign.png)
 
 Text · signature (draw once, reuse) · today's date · checkmark · cross · stamps · images. Fillable PDF form fields work too — click and type.
+
+**Auto-Fill** fills a form from **My Profile** — name, credentials, specialty, NPI, DEA, license number and state, phone, fax, email, address, practice, date of birth and today's date — saved only on this Mac. It works on fillable PDFs (matching field names), flat forms (finding labels like “Physician Name:”, “NPI # ____” or “City ___ State ___ Zip ___” and writing on the blank) and scanned forms (reading the labels with OCR first). Patient fields and anything already filled in are skipped, and every value is shown for review before filling.
 
 ### Scan & OCR
 ![Scan & OCR tools](docs/screenshots/toolbar-scanocr.png)
@@ -57,6 +67,13 @@ Text · signature (draw once, reuse) · today's date · checkmark · cross · st
 ![Measure tools](docs/screenshots/toolbar-measure.png)
 
 Distance and area, labeled in inches and centimeters.
+
+### AI assistant
+A sidebar tab (✨) powered by Apple's on-device model — nothing is uploaded:
+- **Ask a question** about the PDF. The most relevant passages are found with keyword and meaning search, and the answer is written only from them, with clickable page citations like **[p. 12]**.
+- **Summarize** the current page, or the whole document section by section.
+
+Requires macOS 26 or later with Apple Intelligence turned on.
 
 ### Also
 - Tabs: each PDF opens as a tab in the same window.
@@ -122,15 +139,21 @@ The app is ad-hoc signed for local use. To share it with other Macs, sign it wit
 | `PDFium.swift` | PDFium wrapper: adding text with embedded fonts, image objects, saving |
 | `ImageEditing.swift` | Selecting, moving, resizing, rotating, replacing and deleting page images |
 | `Export.swift` | Word, Excel, text and image export |
+| `CleanCopy.swift` | Clean Copy: removing hidden information before sharing |
+| `PatientInfo.swift`, `PatientInfoSheet.swift` | Finding patient identifiers and the review list |
+| `FormAutofill.swift` | My Profile, finding form labels and blanks, Auto-Fill review |
+| `Assistant.swift` | On-device search, questions and summaries |
 | `ContentView.swift`, `ModeBar.swift`, `SidebarView.swift` | The interface |
 
 ## Limitations
 
-- **Edit → Text** edits one paragraph at a time with a single style for the whole paragraph (no mixed bold words inside it yet). Text inside embedded forms or unusual encodings falls back to a full-page rewrite, which can slightly change spacing elsewhere on that page.
+- **Edit → Text** edits one paragraph at a time. When a paragraph gets longer it grows into the text below rather than pushing it down (drag the next paragraph to make room). Text inside embedded forms or unusual encodings falls back to a full-page rewrite, which can slightly change spacing elsewhere on that page.
+- **Patient Info** and **Auto-Fill** use pattern matching and Apple's on-device language model; always review the list before redacting or filling.
+- **AI assistant** answers come only from the passages it finds and can still be wrong; check the cited page.
 - Redacted, enhanced or margin-cleared pages become high-resolution images with an OCR text layer; selecting text on them is slightly less precise than on the original.
 - Export to Excel produces CSV; Word export keeps text and styling but not exact page layout. There is no PowerPoint export.
 - OCR works best on upright pages — rotate sideways scans first.
 
 ## Privacy
 
-Everything runs on your Mac. OCR uses Apple's on-device Vision framework; no documents are uploaded anywhere. The app is sandboxed and only reads the files you open.
+Everything runs on your Mac. OCR, patient-info detection and the AI assistant use Apple's on-device frameworks (Vision, Natural Language, Foundation Models); no documents are uploaded anywhere. Your profile is stored only on this Mac. The app is sandboxed and only reads the files you open.
