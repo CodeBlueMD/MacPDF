@@ -113,12 +113,28 @@ struct TextBlock {
 
 /// Lays text out the way the editor shows it and returns each line with its baseline origin on the page.
 enum TextLayout {
-    static func lines(_ text: String, style: TextStyle, in rect: CGRect, wraps: Bool) -> [(String, CGPoint)] {
+    /// A stretch of one line in a single font and color, with where its baseline starts on the page.
+    struct Run {
+        let text: String
+        let origin: CGPoint
+        let font: NSFont
+        let color: NSColor
+    }
+
+    /// Plain text in one style.
+    static func styled(_ text: String, _ style: TextStyle) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [.font: style.font, .foregroundColor: style.color])
+    }
+
+    /// Lays text out the way the editor shows it (wrapping, alignment, line spacing) and returns each
+    /// styled run with its baseline origin on the page.
+    static func runs(_ content: NSAttributedString, style: TextStyle, in rect: CGRect, wraps: Bool) -> [Run] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = style.alignment
         paragraph.minimumLineHeight = style.lineHeight
         paragraph.maximumLineHeight = style.lineHeight
-        let attributed = NSAttributedString(string: text, attributes: [.font: style.font, .paragraphStyle: paragraph])
+        let attributed = NSMutableAttributedString(attributedString: content)
+        attributed.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: attributed.length))
 
         let width = wraps ? rect.width : max(rect.width, ceil(attributed.size().width) + 2)
         let height: CGFloat = 100_000
@@ -134,15 +150,26 @@ enum TextLayout {
         // Estimated from the font; writeBlock snaps it to the original text's real baseline.
         let firstBaseline = rect.maxY - style.font.ascender
         let topOrigin = origins.first?.y ?? height
-        let nsText = text as NSString
-        return zip(ctLines, origins).compactMap { line, origin in
-            let range = CTLineGetStringRange(line)
-            let string = nsText.substring(with: NSRange(location: range.location, length: range.length))
-                .trimmingCharacters(in: .newlines)
-            guard !string.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-            let trimmed = string.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-            return (trimmed, CGPoint(x: left + origin.x, y: firstBaseline - (topOrigin - origin.y)))
+        let nsText = attributed.string as NSString
+
+        var result: [Run] = []
+        for (line, lineOrigin) in zip(ctLines, origins) {
+            for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+                let range = CTRunGetStringRange(run)
+                let text = nsText.substring(with: NSRange(location: range.location, length: range.length))
+                    .trimmingCharacters(in: .newlines)
+                    .replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+                guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+                var position = CGPoint.zero
+                CTRunGetPositions(run, CFRange(location: 0, length: 1), &position)
+                let attributes = CTRunGetAttributes(run) as NSDictionary as? [NSAttributedString.Key: Any] ?? [:]
+                result.append(Run(text: text,
+                                  origin: CGPoint(x: left + lineOrigin.x + position.x, y: firstBaseline - (topOrigin - lineOrigin.y)),
+                                  font: (attributes[.font] as? NSFont) ?? style.font,
+                                  color: (attributes[.foregroundColor] as? NSColor) ?? style.color))
+            }
         }
+        return result
     }
 }
 
@@ -155,16 +182,30 @@ extension DocumentModel {
     func beginBlockEdit(_ block: TextBlock, on page: PDFPage) {
         textStyle = block.style
         pageTextStyles = Self.textStyles(on: page)
-        pdfView.beginBlockEdit(block, on: page) { [weak self] text, placed in
-            guard let self, let text else {
+        pdfView.beginBlockEdit(block, on: page) { [weak self] content, placed in
+            guard let self, let content else {
                 self?.textStyle = nil
                 return
             }
             let style = self.textStyle ?? block.style
             self.textStyle = nil
-            guard text != block.text || style != block.style || placed.rect != block.rect else { return }
-            self.writeBlock(block, text: text, style: style, on: page, placedAt: placed)
+            let restyled = Self.hasRunStyling(content, besides: style)
+            guard content.string != block.text || style != block.style || placed.rect != block.rect || restyled else { return }
+            self.writeBlock(block, content: content, style: style, on: page, placedAt: placed)
         }
+    }
+
+    /// Whether any words were given their own font, size or color.
+    private static func hasRunStyling(_ content: NSAttributedString, besides style: TextStyle) -> Bool {
+        var differs = false
+        content.enumerateAttributes(in: NSRange(location: 0, length: content.length)) { attributes, _, stop in
+            let font = attributes[.font] as? NSFont, color = attributes[.foregroundColor] as? NSColor
+            if (font.map { $0 != style.font } ?? false) || (color.map { $0 != style.color } ?? false) {
+                differs = true
+                stop.pointee = true
+            }
+        }
+        return differs
     }
 
     /// The distinct font/size/color combinations used on the page, most common first, so edited
@@ -209,12 +250,19 @@ extension DocumentModel {
     /// where it was.
     func writeBlock(_ block: TextBlock, text: String, style: TextStyle, on page: PDFPage,
                     placedAt placed: TextBlock? = nil, actionName: String = "Edit Text") {
+        writeBlock(block, content: TextLayout.styled(text, style), style: style, on: page, placedAt: placed, actionName: actionName)
+    }
+
+    /// `content` may mix fonts, sizes and colors (bold words, etc.); `style` gives the alignment,
+    /// line spacing and the paragraph's main font.
+    func writeBlock(_ block: TextBlock, content: NSAttributedString, style: TextStyle, on page: PDFPage,
+                    placedAt placed: TextBlock? = nil, actionName: String = "Edit Text") {
         let target = placed ?? block
         // Lay out at the original position with the target width, then shift to the target's top-left.
         let layoutRect = CGRect(x: block.rect.minX, y: block.rect.minY,
                                 width: target.wraps ? target.rect.width : block.rect.width, height: block.rect.height)
         let offset = CGPoint(x: target.rect.minX - block.rect.minX, y: target.rect.maxY - block.rect.maxY)
-        let lines = TextLayout.lines(text, style: style, in: layoutRect, wraps: target.wraps)
+        let lines = TextLayout.runs(content, style: style, in: layoutRect, wraps: target.wraps)
         var base = page
         var shift = CGPoint.zero
         var removeWithPDFium = false
@@ -225,8 +273,8 @@ extension DocumentModel {
                 base = cleaned
                 // Sit the new text on the original first baseline (and left edge when left-aligned).
                 if let top = origins.map(\.y).max(), let first = lines.first {
-                    shift.y = top - first.1.y
-                    if style.alignment == .left, let left = origins.map(\.x).min() { shift.x = left - first.1.x }
+                    shift.y = top - first.origin.y
+                    if style.alignment == .left, let left = origins.map(\.x).min() { shift.x = left - first.origin.x }
                 }
             } else {
                 removeWithPDFium = true // e.g. compressed in a way the direct path doesn't read
@@ -239,9 +287,9 @@ extension DocumentModel {
                 let originals = editor.textObjects.filter { region.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }
                 if let first = originals.max(by: { $0.bounds.maxY < $1.bounds.maxY }),
                    let baseline = editor.origin(of: first), let firstLine = lines.first {
-                    shift.y = baseline.y - firstLine.1.y
+                    shift.y = baseline.y - firstLine.origin.y
                     if style.alignment == .left, let leftmost = originals.compactMap(editor.origin(of:)).map(\.x).min() {
-                        shift.x = leftmost - firstLine.1.x
+                        shift.x = leftmost - firstLine.origin.x
                     }
                 }
                 // Nothing to replace means the click wasn't really on text; don't add a copy.
@@ -249,10 +297,13 @@ extension DocumentModel {
                 originals.forEach(editor.remove)
             }
             guard !lines.isEmpty else { return true }
-            guard let font = editor.load(style.font) else { return false }
-            for (line, origin) in lines {
-                editor.addText(line, font: font, size: style.size, color: style.color,
-                               at: CGPoint(x: origin.x + shift.x + offset.x, y: origin.y + shift.y + offset.y))
+            var fonts: [String: FPDF_FONT] = [:]
+            for run in lines {
+                let key = run.font.fontName
+                guard let font = fonts[key] ?? editor.load(run.font) else { return false }
+                fonts[key] = font
+                editor.addText(run.text, font: font, size: run.font.pointSize, color: run.color,
+                               at: CGPoint(x: run.origin.x + shift.x + offset.x, y: run.origin.y + shift.y + offset.y))
             }
             return true
         }

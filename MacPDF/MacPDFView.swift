@@ -59,7 +59,9 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
     /// Multi-line editor for Edit → Text (rewriting the page's own paragraphs).
     private var blockEditor: NSTextView?
-    private var blockCommit: ((String?, TextBlock) -> Void)?
+    private var blockCommit: ((NSAttributedString?, TextBlock) -> Void)?
+    /// The paragraph style last applied to the editor, to restyle words without losing their own bold/italic/color.
+    private var appliedStyle: TextStyle?
     private var blockEdit: (page: PDFPage, block: TextBlock)?
     /// Where the paragraph will go, in page coordinates; moved and resized with the box's handles.
     private var blockFrame = CGRect.zero
@@ -481,11 +483,12 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     // MARK: Paragraph editing
 
     /// Opens an editor over `block`, styled from `model.textStyle` and wrapping like the page.
-    func beginBlockEdit(_ block: TextBlock, on page: PDFPage, commit: @escaping (String?, TextBlock) -> Void) {
+    func beginBlockEdit(_ block: TextBlock, on page: PDFPage, commit: @escaping (NSAttributedString?, TextBlock) -> Void) {
         endInlineEdit()
         guard let documentView else { return }
         let editor = NSTextView(frame: .zero)
-        editor.isRichText = false
+        editor.isRichText = true
+        editor.importsGraphics = false
         editor.allowsUndo = true
         editor.drawsBackground = true
         editor.backgroundColor = .white
@@ -504,6 +507,7 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
         blockEditor = editor
         blockCommit = commit
+        appliedStyle = nil
         blockEdit = (page, block)
         blockFrame = block.rect
         blockWraps = block.wraps
@@ -526,23 +530,82 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         editor.setSelectedRange(NSRange(location: index, length: 0))
     }
 
-    /// Re-applies the font, size, color and alignment from the Edit → Text panel.
+    /// Re-applies the paragraph's font, size, color and alignment from the Edit → Text panel. Words
+    /// styled on their own keep their bold/italic and color; the family and size follow the paragraph.
     func applyEditorStyle() {
-        guard let editor = blockEditor, let style = model?.textStyle, let (page, _) = blockEdit else { return }
+        guard let editor = blockEditor, let storage = editor.textStorage, let style = model?.textStyle,
+              let (page, _) = blockEdit else { return }
         let scale = documentScale(for: page)
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = style.alignment
         paragraph.minimumLineHeight = style.lineHeight * scale
         paragraph.maximumLineHeight = style.lineHeight * scale
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont(descriptor: style.font.fontDescriptor, size: style.size * scale) ?? style.font,
-            .foregroundColor: style.color,
-            .paragraphStyle: paragraph,
-        ]
-        editor.textStorage?.setAttributes(attributes, range: NSRange(location: 0, length: editor.textStorage?.length ?? 0))
-        editor.typingAttributes = attributes
+        let base = NSFont(descriptor: style.font.fontDescriptor, size: style.size * scale) ?? style.font
+        let whole = NSRange(location: 0, length: storage.length)
+        storage.beginEditing()
+        if let old = appliedStyle {
+            let manager = NSFontManager.shared
+            let sizeRatio = style.size / max(old.size, 1)
+            storage.enumerateAttribute(.font, in: whole) { value, range, _ in
+                guard let font = value as? NSFont else { return }
+                var updated = font
+                if old.font.familyName != style.font.familyName, let family = style.font.familyName {
+                    updated = manager.convert(updated, toFamily: family)
+                }
+                // Paragraph-wide bold/italic changes apply to every word.
+                for trait in [NSFontTraitMask.boldFontMask, .italicFontMask]
+                where old.font.fontDescriptor.symbolicTraits != style.font.fontDescriptor.symbolicTraits {
+                    let had = manager.traits(of: old.font).contains(trait), has = manager.traits(of: style.font).contains(trait)
+                    if had != has { updated = has ? manager.convert(updated, toHaveTrait: trait) : manager.convert(updated, toNotHaveTrait: trait) }
+                }
+                updated = manager.convert(updated, toSize: font.pointSize * sizeRatio)
+                storage.addAttribute(.font, value: updated, range: range)
+            }
+            if old.color != style.color {
+                storage.enumerateAttribute(.foregroundColor, in: whole) { value, range, _ in
+                    if (value as? NSColor) == old.color || value == nil { storage.addAttribute(.foregroundColor, value: style.color, range: range) }
+                }
+            }
+        } else {
+            storage.setAttributes([.font: base, .foregroundColor: style.color], range: whole)
+        }
+        storage.addAttribute(.paragraphStyle, value: paragraph, range: whole)
+        storage.endEditing()
+        var typing = editor.typingAttributes
+        typing[.paragraphStyle] = paragraph
+        if appliedStyle == nil { typing[.font] = base; typing[.foregroundColor] = style.color }
+        editor.typingAttributes = typing
+        appliedStyle = style
         resizeBlockEditor()
     }
+
+    /// Applies a font/color change to the selected words only. Returns false when nothing is selected.
+    @discardableResult
+    func styleSelection(font change: ((NSFont) -> NSFont)? = nil, color: NSColor? = nil) -> Bool {
+        guard let editor = blockEditor, let storage = editor.textStorage else { return false }
+        let range = editor.selectedRange()
+        guard range.length > 0 else { return false }
+        storage.beginEditing()
+        if let change {
+            storage.enumerateAttribute(.font, in: range) { value, sub, _ in
+                if let font = value as? NSFont { storage.addAttribute(.font, value: change(font), range: sub) }
+            }
+        }
+        if let color { storage.addAttribute(.foregroundColor, value: color, range: range) }
+        storage.endEditing()
+        resizeBlockEditor()
+        return true
+    }
+
+    /// Grows or shrinks the selected words by `points` (page points). False when nothing is selected.
+    func resizeSelection(by points: CGFloat) -> Bool {
+        guard let (page, _) = blockEdit else { return false }
+        let scale = documentScale(for: page)
+        return styleSelection(font: { NSFont(descriptor: $0.fontDescriptor, size: max($0.pointSize + points * scale, 4 * scale)) ?? $0 })
+    }
+
+    /// Font of the selected words (page points), for showing bold/italic state in the panel.
+    var selectionHasText: Bool { (blockEditor?.selectedRange().length ?? 0) > 0 }
 
     /// Keeps the editor's top edge fixed and grows it to fit the text.
     private func resizeBlockEditor() {
@@ -669,14 +732,26 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         blockEditor = nil
         blockCommit = nil
         blockEdit = nil
-        let text = editor.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Back to page points (the editor shows text at the zoomed size), trimmed like the plain text was.
+        let scale = blockEdit.map { documentScale(for: $0.page) } ?? 1
+        let content = NSMutableAttributedString(attributedString: editor.attributedString())
+        content.removeAttribute(.paragraphStyle, range: NSRange(location: 0, length: content.length))
+        content.enumerateAttribute(.font, in: NSRange(location: 0, length: content.length)) { value, range, _ in
+            if let font = value as? NSFont, let unscaled = NSFont(descriptor: font.fontDescriptor, size: font.pointSize / scale) {
+                content.addAttribute(.font, value: unscaled, range: range)
+            }
+        }
+        while let first = content.string.first, first.isWhitespace || first.isNewline { content.deleteCharacters(in: NSRange(location: 0, length: 1)) }
+        while let last = content.string.last, last.isWhitespace || last.isNewline {
+            content.deleteCharacters(in: NSRange(location: content.length - 1, length: 1))
+        }
         editor.delegate = nil
         editor.removeFromSuperview()
         editorChrome.removeFromSuperview()
         originalMask.removeFromSuperview()
         clearPreview()
         window?.makeFirstResponder(self)
-        if let placed { commit?(cancel ? nil : text, placed) }
+        if let placed { commit?(cancel ? nil : content, placed) }
     }
 
     func textDidChange(_ notification: Notification) {

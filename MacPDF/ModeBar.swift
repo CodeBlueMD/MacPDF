@@ -254,6 +254,9 @@ struct TextStylePanel: View {
 
             Stepper(value: Binding(get: { style.wrappedValue.size },
                                    set: { new in
+                                       // With words selected, only they change size.
+                                       let delta = new - style.wrappedValue.size
+                                       if model.pdfView.resizeSelection(by: delta) { return }
                                        // Keep the line spacing in proportion to the size.
                                        let ratio = style.wrappedValue.lineHeight / max(style.wrappedValue.size, 1)
                                        style.wrappedValue.size = new
@@ -265,16 +268,16 @@ struct TextStylePanel: View {
             .fixedSize()
             .help("Size")
 
-            Toggle(isOn: Binding(get: { style.wrappedValue.isBold }, set: { _ in style.wrappedValue.toggle(.boldFontMask) })) {
+            Toggle(isOn: Binding(get: { style.wrappedValue.isBold }, set: { _ in toggle(.boldFontMask) })) {
                 Image(systemName: "bold")
             }
             .toggleStyle(.button)
-            .help("Bold")
-            Toggle(isOn: Binding(get: { style.wrappedValue.isItalic }, set: { _ in style.wrappedValue.toggle(.italicFontMask) })) {
+            .help("Bold — selected words, or the whole paragraph")
+            Toggle(isOn: Binding(get: { style.wrappedValue.isItalic }, set: { _ in toggle(.italicFontMask) })) {
                 Image(systemName: "italic")
             }
             .toggleStyle(.button)
-            .help("Italic")
+            .help("Italic — selected words, or the whole paragraph")
 
             Picker("Alignment", selection: Binding(get: { style.wrappedValue.alignment }, set: { style.wrappedValue.alignment = $0 })) {
                 Image(systemName: "text.alignleft").tag(NSTextAlignment.left)
@@ -286,7 +289,11 @@ struct TextStylePanel: View {
             .fixedSize()
 
             ColorPicker("Text color", selection: Binding(get: { Color(nsColor: style.wrappedValue.color) },
-                                                         set: { style.wrappedValue.color = NSColor($0) }),
+                                                         set: { color in
+                                                             if !model.pdfView.styleSelection(color: NSColor(color)) {
+                                                                 style.wrappedValue.color = NSColor(color)
+                                                             }
+                                                         }),
                         supportsOpacity: false)
                 .labelsHidden()
                 .help("Text color")
@@ -327,6 +334,17 @@ struct HeaderFooterSheet: View {
         }
         .padding()
         .frame(width: 380)
+    }
+}
+
+extension TextStylePanel {
+    /// Bold/italic for the selected words, or the whole paragraph when nothing is selected.
+    fileprivate func toggle(_ trait: NSFontTraitMask) {
+        let manager = NSFontManager.shared
+        let handled = model.pdfView.styleSelection(font: { font in
+            manager.traits(of: font).contains(trait) ? manager.convert(font, toNotHaveTrait: trait) : manager.convert(font, toHaveTrait: trait)
+        })
+        if !handled { model.textStyle?.toggle(trait) }
     }
 }
 
