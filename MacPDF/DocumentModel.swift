@@ -27,7 +27,7 @@ final class DocumentModel: ObservableObject {
     var fileName = "Document"
 
     @Published var mode: Mode = .annotate {
-        didSet { if oldValue != mode { tool = .select } }
+        didSet { if oldValue != mode { tool = mode == .edit ? .editText : .select } }
     }
     @Published var tool: Tool = .select
     @Published var toolColors: [Tool: Color] = [:]

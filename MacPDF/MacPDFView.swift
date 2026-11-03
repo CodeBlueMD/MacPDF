@@ -8,6 +8,9 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     private var inkPath: NSBezierPath?
     private var dragPage: PDFPage?
     private var dragStart: CGPoint?
+    /// Edit → Text press on a paragraph: becomes a move if dragged, an edit if just clicked.
+    private var textPress: (start: CGPoint, viewStart: CGPoint, page: PDFPage, block: TextBlock, moved: Bool)?
+
     /// Edit → Image drag on a selected image: moving it, or resizing from a corner (0–3).
     private var imageDrag: (start: CGPoint, original: CGRect, corner: Int?, current: CGRect)?
 
@@ -94,9 +97,11 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
             if let hit, hit.isFreeText {
                 // Text added by the older cover-style editing is still an annotation.
                 model.editTextAnnotation(hit)
-            } else {
-                model.beginBlockEdit(at: point, on: page)
-                placeCaret(at: point, on: page)
+            } else if let block = TextBlock.at(point, on: page) {
+                model.selectedImage = nil
+                textPress = (point, convert(event.locationInWindow, from: nil), page, block, false)
+            } else if !beginImagePress(at: point, on: page, model: model) {
+                model.beginBlockEdit(at: point, on: page) // empty space: new text
             }
         case .textBox:
             if let hit, hit.isFreeText {
@@ -111,15 +116,7 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         case .date, .checkmark, .cross:
             model.addFillText(model.tool, at: point, on: page)
         case .image where model.pendingImage == nil:
-            if let selection = model.selectedImage, selection.page === page,
-               let corner = corner(near: point, of: selection.rect) {
-                imageDrag = (point, selection.rect, corner, selection.rect)
-            } else if let hit = model.image(at: point, on: page) {
-                model.selectedImage = hit
-                imageDrag = (point, hit.rect, nil, hit.rect)
-            } else {
-                model.selectedImage = nil
-            }
+            if !beginImagePress(at: point, on: page, model: model) { model.selectedImage = nil }
         case .redact where isOverText(point, on: page):
             redactingSelection = true
             super.mouseDown(with: event)
@@ -137,7 +134,30 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         }
     }
 
+    /// Selects the image under `point` (or grabs a corner of the selected one) to drag. False if none.
+    private func beginImagePress(at point: CGPoint, on page: PDFPage, model: DocumentModel) -> Bool {
+        if let selection = model.selectedImage, selection.page === page,
+           let corner = corner(near: point, of: selection.rect) {
+            imageDrag = (point, selection.rect, corner, selection.rect)
+            return true
+        }
+        guard let hit = model.image(at: point, on: page) else { return false }
+        model.selectedImage = hit
+        imageDrag = (point, hit.rect, nil, hit.rect)
+        return true
+    }
+
     override func mouseDragged(with event: NSEvent) {
+        if var press = textPress {
+            let viewPoint = convert(event.locationInWindow, from: nil)
+            if !press.moved, hypot(viewPoint.x - press.viewStart.x, viewPoint.y - press.viewStart.y) < 4 { return }
+            press.moved = true
+            textPress = press
+            let point = convert(viewPoint, to: press.page)
+            let moved = press.block.rect.offsetBy(dx: point.x - press.start.x, dy: point.y - press.start.y)
+            overlay.show(NSBezierPath(rect: overlayRect(moved, on: press.page)), stroke: .controlAccentColor, width: 1.5, dashed: true)
+            return
+        }
         if var drag = imageDrag, let selection = model?.selectedImage {
             let point = convert(convert(event.locationInWindow, from: nil), to: selection.page)
             drag.current = Self.dragged(drag.original, corner: drag.corner, from: drag.start, to: point)
@@ -161,6 +181,19 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
     override func mouseUp(with event: NSEvent) {
         guard let model else { return super.mouseUp(with: event) }
+
+        if let press = textPress {
+            textPress = nil
+            clearPreview()
+            let point = convert(convert(event.locationInWindow, from: nil), to: press.page)
+            if press.moved {
+                model.moveBlock(press.block, by: CGPoint(x: point.x - press.start.x, y: point.y - press.start.y), on: press.page)
+            } else {
+                model.beginBlockEdit(press.block, on: press.page)
+                placeCaret(at: press.start, on: press.page)
+            }
+            return
+        }
 
         if let drag = imageDrag {
             imageDrag = nil

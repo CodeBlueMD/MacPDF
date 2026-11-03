@@ -51,8 +51,8 @@ struct ModeBar: View {
                     TextStylePanel(model: model)
                 }
                 tool(.image, labeled: true)
-                if model.tool == .image {
-                    action("Add Image…", "plus") { model.chooseImage() }
+                if model.tool == .image || model.selectedImage != nil {
+                    if model.tool == .image { action("Add Image…", "plus") { model.chooseImage() } }
                     if model.selectedImage != nil {
                         action("Rotate Left", "rotate.left") { model.rotateSelectedImage(by: 90) }
                         action("Rotate Right", "rotate.right") { model.rotateSelectedImage(by: -90) }

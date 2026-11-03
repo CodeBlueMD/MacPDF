@@ -43,10 +43,8 @@ struct ContentView: View {
         .onChange(of: model.tool) { _, tool in
             model.pdfView.endInlineEdit()
             model.pdfView.window?.invalidateCursorRects(for: model.pdfView)
-            if tool != .image {
-                model.pendingImage = nil
-                model.selectedImage = nil
-            }
+            if tool != .image { model.pendingImage = nil }
+            if tool != .image && tool != .editText { model.selectedImage = nil }
         }
         .sheet(item: $model.noteEdit) { edit in
             NoteEditor(edit: edit, model: model)
@@ -100,7 +98,7 @@ struct ContentView: View {
     private var toolHint: String? {
         switch model.tool {
         case .redact: "Select text or drag a box to redact it. The content underneath is permanently removed."
-        case .editText: "Click any text to edit it, or empty space to add text. Click outside the box to finish; Esc cancels."
+        case .editText: "Click text to edit it, drag text or a picture to move it, or click empty space to add text. Esc cancels."
         case .image where model.pendingImage != nil: "Click or drag on the page to place the image."
         case .image: "Click an image to select it. Drag to move, drag a corner to resize, Delete to remove."
         case .link: "Drag a box over the area to link."

@@ -84,10 +84,13 @@ struct TextBlock {
         let font: NSFont
         let color: NSColor
 
+        /// PDFKit reports each image as a one-character "line" holding U+FFFC (object replacement).
+        private static let notText = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FFFC}"))
+
         init?(_ selection: PDFSelection, page: PDFPage) {
             let text = (selection.string ?? "").trimmingCharacters(in: .newlines)
             let bounds = selection.bounds(for: page)
-            guard !text.trimmingCharacters(in: .whitespaces).isEmpty, bounds.height > 0,
+            guard !text.trimmingCharacters(in: Self.notText).isEmpty, bounds.height > 0,
                   let attributed = selection.attributedString, attributed.length > 0 else { return nil }
             let attributes = attributed.attributes(at: 0, effectiveRange: nil)
             self.bounds = bounds
@@ -146,7 +149,10 @@ enum TextLayout {
 extension DocumentModel {
     /// Edit → Text on the page's own text: click a paragraph, retype it, and it's rewritten in place.
     func beginBlockEdit(at point: CGPoint, on page: PDFPage) {
-        let block = TextBlock.at(point, on: page) ?? newBlock(at: point, on: page)
+        beginBlockEdit(TextBlock.at(point, on: page) ?? newBlock(at: point, on: page), on: page)
+    }
+
+    func beginBlockEdit(_ block: TextBlock, on page: PDFPage) {
         textStyle = block.style
         pdfView.beginBlockEdit(block, on: page) { [weak self] text in
             guard let self, let text else {
@@ -170,7 +176,13 @@ extension DocumentModel {
     /// Removes the paragraph's original text and writes the new lines in the chosen font.
     /// The old text is cut out of the page's drawing commands directly, so nothing else on the page
     /// changes; PDFium then only adds the new text.
-    func writeBlock(_ block: TextBlock, text: String, style: TextStyle, on page: PDFPage) {
+    /// Drag-to-move for a paragraph: rewrites the same text `offset` points away.
+    func moveBlock(_ block: TextBlock, by offset: CGPoint, on page: PDFPage) {
+        writeBlock(block, text: block.text, style: block.style, on: page, offset: offset, actionName: "Move Text")
+    }
+
+    func writeBlock(_ block: TextBlock, text: String, style: TextStyle, on page: PDFPage,
+                    offset: CGPoint = .zero, actionName: String = "Edit Text") {
         let lines = TextLayout.lines(text, style: style, in: block.rect, wraps: block.wraps)
         var base = page
         var shift = CGPoint.zero
@@ -201,13 +213,15 @@ extension DocumentModel {
                         shift.x = leftmost - firstLine.1.x
                     }
                 }
+                // Nothing to replace means the click wasn't really on text; don't add a copy.
+                guard !originals.isEmpty else { return false }
                 originals.forEach(editor.remove)
             }
             guard !lines.isEmpty else { return true }
             guard let font = editor.load(style.font) else { return false }
             for (line, origin) in lines {
                 editor.addText(line, font: font, size: style.size, color: style.color,
-                               at: CGPoint(x: origin.x + shift.x, y: origin.y + shift.y))
+                               at: CGPoint(x: origin.x + shift.x + offset.x, y: origin.y + shift.y + offset.y))
             }
             return true
         }
@@ -215,6 +229,6 @@ extension DocumentModel {
             message = "Couldn't rewrite this text. The PDF's text may be stored in a way MacPDF can't edit yet."
             return
         }
-        replace(page, with: edited, actionName: "Edit Text")
+        replace(page, with: edited, actionName: actionName)
     }
 }

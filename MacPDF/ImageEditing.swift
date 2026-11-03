@@ -59,12 +59,21 @@ extension DocumentModel {
         guard let selection = selectedImage else { return }
         let page = selection.page
         let edited = ContentSurgery.edit(page) { ops in
-            guard let op = Self.drawCommand(for: selection, in: ops), let name = op.operands.first?.text else { return [] }
-            // The image draws with CTM C; we want C·T. An `X cm` just before `Do` gives X·C, so X = C·T·C⁻¹.
-            let x = op.ctm.concatenating(t).concatenating(op.ctm.inverted())
-            // PDF numbers can't use exponents (a 90° turn gives values like 6e-17).
-            let m = [x.a, x.b, x.c, x.d, x.tx, x.ty].map { String(format: "%.6f", abs($0) < 1e-9 ? 0 : $0) }.joined(separator: " ")
-            return [(op, "q \(m) cm \(name) Do Q")]
+            guard let doIndex = Self.drawCommandIndex(for: selection, in: ops) else { return [] }
+            // Something drawn with CTM C should end up at C·T. An `X cm` placed where the CTM is C
+            // gives X·C, so X = C·T·C⁻¹. Applying it at the start of the group that holds the image
+            // also moves the clipping path many PDFs (e.g. from Word) draw images through.
+            func matrix(_ c: CGAffineTransform) -> String {
+                let x = c.concatenating(t).concatenating(c.inverted())
+                // PDF numbers can't use exponents (a 90° turn gives values like 6e-17).
+                return [x.a, x.b, x.c, x.d, x.tx, x.ty].map { String(format: "%.6f", abs($0) < 1e-9 ? 0 : $0) }.joined(separator: " ")
+            }
+            if let group = Self.imageGroupStart(doIndex, in: ops) {
+                return [(ops[group], "q \(matrix(ops[group].ctm)) cm")]
+            }
+            let op = ops[doIndex]
+            guard let name = op.operands.first?.text else { return [] }
+            return [(op, "q \(matrix(op.ctm)) cm \(name) Do Q")]
         } ?? PDFium.edit(page) { editor in
             guard let object = editor.objects.first(where: { $0.index == selection.index }) else { return false }
             editor.transform(object, by: t)
@@ -79,7 +88,7 @@ extension DocumentModel {
         guard let selection = selectedImage else { return }
         let page = selection.page
         let edited = ContentSurgery.edit(page) { ops in
-            Self.drawCommand(for: selection, in: ops).map { [($0, "")] } ?? []
+            Self.drawCommandIndex(for: selection, in: ops).map { [(ops[$0], "")] } ?? []
         } ?? PDFium.edit(page) { editor in
             guard let object = editor.objects.first(where: { $0.index == selection.index }) else { return false }
             editor.remove(object)
@@ -90,14 +99,42 @@ extension DocumentModel {
         selectedImage = nil
     }
 
-    /// The `Do` command that draws the selected image: the one whose placement matches its bounds.
-    private static func drawCommand(for selection: ImageSelection, in ops: [ContentSurgery.Operation]) -> ContentSurgery.Operation? {
-        ops.filter { $0.op == "Do" }.min { a, b in
-            distance(CGRect(x: 0, y: 0, width: 1, height: 1).applying(a.ctm), selection.rect)
-                < distance(CGRect(x: 0, y: 0, width: 1, height: 1).applying(b.ctm), selection.rect)
-        }.flatMap { op in
-            distance(CGRect(x: 0, y: 0, width: 1, height: 1).applying(op.ctm), selection.rect) < 2 ? op : nil
+    /// Index of the `Do` command that draws the selected image: the one whose placement matches its bounds.
+    private static func drawCommandIndex(for selection: ImageSelection, in ops: [ContentSurgery.Operation]) -> Int? {
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let best = ops.indices.filter { ops[$0].op == "Do" }
+            .min { distance(unit.applying(ops[$0].ctm), selection.rect) < distance(unit.applying(ops[$1].ctm), selection.rect) }
+        return best.flatMap { distance(unit.applying(ops[$0].ctm), selection.rect) < 2 ? $0 : nil }
+    }
+
+    /// Commands that only set up how the image is drawn (position, clip, state, tags), not draw anything.
+    private static let setupOps: Set<String> = ["q", "Q", "cm", "re", "m", "l", "c", "v", "y", "h", "W", "W*", "n", "gs",
+                                                "w", "J", "j", "M", "d", "ri", "i", "BDC", "BMC", "EMC", "MP", "DP"]
+
+    /// The outermost `q` whose group contains the image and nothing else that draws, so transforming
+    /// the group moves the image together with any clip set up for it.
+    private static func imageGroupStart(_ doIndex: Int, in ops: [ContentSurgery.Operation]) -> Int? {
+        var candidates: [Int] = []
+        var depth = 0
+        var k = doIndex - 1
+        while k >= 0, setupOps.contains(ops[k].op) {
+            if ops[k].op == "Q" { depth += 1 } else if ops[k].op == "q" {
+                if depth == 0 { candidates.append(k) } else { depth -= 1 }
+            }
+            k -= 1
         }
+        // Outermost first: its matching Q must come before anything else is drawn.
+        for start in candidates.reversed() {
+            var level = 0, j = start, clean = true
+            while j < ops.count {
+                let op = ops[j].op
+                if op == "q" { level += 1 } else if op == "Q" { level -= 1; if level == 0 { break } }
+                if j != doIndex, !setupOps.contains(op) { clean = false; break }
+                j += 1
+            }
+            if clean, j < ops.count { return start }
+        }
+        return nil
     }
 
     private static func distance(_ a: CGRect, _ b: CGRect) -> CGFloat {
