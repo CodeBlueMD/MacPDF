@@ -161,3 +161,7 @@ The app is ad-hoc signed for local use. To share it with other Macs, sign it wit
 ## Privacy
 
 Everything runs on your Mac. OCR, patient-info detection and the AI assistant use Apple's on-device frameworks (Vision, Natural Language, Foundation Models); no documents are uploaded anywhere. Your profile is stored only on this Mac. The app is sandboxed and only reads the files you open.
+
+## License
+
+MIT — see [LICENSE](LICENSE). PDFium (downloaded by `scripts/fetch-pdfium.sh`, not included in this repo) is under its own BSD-style license.
