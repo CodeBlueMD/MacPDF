@@ -3,21 +3,61 @@ import SwiftUI
 /// The tab row in the window toolbar: Annotate, Edit, Export, …
 struct ModePicker: View {
     @ObservedObject var model: DocumentModel
+    @Namespace private var selection
+    @State private var hovered: Mode?
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(Mode.allCases) { mode in
+                let isSelected = model.mode == mode
                 Button { model.mode = mode } label: {
                     Label(mode.title, systemImage: mode.symbol)
                         .labelStyle(.titleAndIcon)
+                        .fontWeight(isSelected ? .medium : .regular)
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(model.mode == mode ? Color.primary.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 6))
+                        .background {
+                            if isSelected {
+                                // One pill shared by all modes, so it slides to the chosen one.
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color.primary.opacity(0.12))
+                                    .matchedGeometryEffect(id: "pill", in: selection)
+                            } else if hovered == mode {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color.primary.opacity(0.06))
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onHover { inside in
+                    if inside { hovered = mode } else if hovered == mode { hovered = nil }
+                }
             }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: model.mode)
+        .animation(.easeOut(duration: 0.12), value: hovered)
+    }
+}
+
+/// Toolbar-row buttons: a soft plate on hover and a firmer one while pressed, so every tool
+/// answers the pointer the way the window toolbar's own buttons do.
+struct BarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { Plate(configuration: configuration) }
+
+    private struct Plate: View {
+        let configuration: Configuration
+        @State private var hovering = false
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(!isEnabled ? 0 : configuration.isPressed ? 0.14 : hovering ? 0.07 : 0)))
+                .opacity(isEnabled ? 1 : 0.4)
+                .onHover { hovering = $0 }
+                .animation(.easeOut(duration: 0.1), value: hovering)
         }
     }
 }
@@ -121,6 +161,9 @@ struct ModeBar: View {
         .frame(height: 40)
         .background(.bar)
         .disabled(model.progress != nil)
+        // The text and image options slide in beside their tool instead of making the row jump.
+        .animation(.easeOut(duration: 0.16), value: model.textStyle != nil)
+        .animation(.easeOut(duration: 0.16), value: model.selectedImage != nil)
     }
 
     private var gap: some View { Spacer().frame(width: 14) }
@@ -137,14 +180,14 @@ struct ModeBar: View {
         } label: {
             itemLabel(tool.title, tool.symbol, labeled: labeled)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BarButtonStyle())
         .background(selectedBackground(model.tool == tool))
         .help(tool.title)
     }
 
     private func action(_ title: String, _ symbol: String, perform: @escaping () -> Void) -> some View {
         Button(action: perform) { itemLabel(title, symbol, labeled: true) }
-            .buttonStyle(.plain)
+            .buttonStyle(BarButtonStyle())
             .help(title)
     }
 
@@ -169,7 +212,7 @@ struct ModeBar: View {
                                             @ViewBuilder options: () -> Options) -> some View {
         HStack(spacing: 0) {
             Button(action: action) { itemLabel(title, symbol, labeled: labeled) }
-                .buttonStyle(.plain)
+                .buttonStyle(BarButtonStyle())
             Menu(content: options) { EmptyView() }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.visible)
@@ -205,7 +248,7 @@ struct ModeBar: View {
         } label: {
             itemLabel("Stamp", "rubber.stamp", labeled: model.mode == .fillSign)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BarButtonStyle())
         .frame(height: 30)
         .background(selectedBackground(model.tool == .stamp || model.showStampSidebar))
         .help("Stamps — customize and choose standard stamps")

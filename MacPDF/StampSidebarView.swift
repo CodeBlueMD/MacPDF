@@ -21,20 +21,24 @@ struct StampSidebarView: View {
                     showingAddCustom = true
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(BarButtonStyle())
                 .help("Create Custom Stamp")
 
                 Button {
                     model.showStampSidebar = false
+                    if model.tool == .stamp { model.tool = .select }
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .padding(.leading, 8)
+                .buttonStyle(BarButtonStyle())
                 .help("Close Stamps")
             }
             .padding(.horizontal, 14)
@@ -47,6 +51,7 @@ struct StampSidebarView: View {
                 Text("Custom").tag(1)
             }
             .pickerStyle(.segmented)
+            .labelsHidden() // the "Stamp Type" caption was drawn beside the control, squeezing it
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
 
@@ -63,10 +68,14 @@ struct StampSidebarView: View {
                 }
             }
         }
-        .frame(minWidth: 260, maxWidth: 300)
+        .frame(width: 280)
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $showingAddCustom) {
             AddCustomStampSheet(model: model)
+        }
+        // A stamp just created is on the Custom tab; show it rather than leaving the user on Standard.
+        .onChange(of: model.customStamps.count) { old, new in
+            if new > old { selectedTab = 1 }
         }
     }
 
@@ -94,31 +103,32 @@ struct StampSidebarView: View {
                 Spacer()
             }
 
+            if model.customStamps.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "seal")
+                        .font(.system(size: 26, weight: .light))
+                        .foregroundStyle(.tertiary)
+                    Text("No custom stamps yet")
+                        .font(.callout.weight(.medium))
+                    Text("Make one with your own text, style and color.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Create Custom Stamp…") { showingAddCustom = true }
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            }
+
             ForEach(model.customStamps) { stamp in
-                HStack {
+                HStack(spacing: 4) {
+                    // Shown as it will print, in its own style and color, like the standard stamps.
                     Button {
                         model.selectStamp(stamp)
                     } label: {
-                        HStack {
-                            Text(stamp.title)
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Color.primary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(nsColor: .controlBackgroundColor))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(model.activeStamp.id == stamp.id ? Color.accentColor : Color.gray.opacity(0.2),
-                                        lineWidth: model.activeStamp.id == stamp.id ? 2 : 1)
-                        )
+                        StampPreviewCell(stamp: stamp, isSelected: model.activeStamp.id == stamp.id)
                     }
                     .buttonStyle(.plain)
 
@@ -128,10 +138,11 @@ struct StampSidebarView: View {
                         Image(systemName: "trash")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(BarButtonStyle())
                     .help("Delete Stamp")
-                    .padding(.leading, 4)
                 }
             }
         }
@@ -142,11 +153,19 @@ struct StampSidebarView: View {
 private struct StampPreviewCell: View {
     let stamp: StampItem
     let isSelected: Bool
+    @State private var hovering = false
+
+    /// Stamps are printed on the page, so they are previewed on paper in both appearances. On the
+    /// dark control background, dark-ink stamps (black, navy, forest green) were nearly invisible.
+    private static let paper = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(calibratedWhite: 0.93, alpha: 1) : .white
+    })
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(nsColor: .controlBackgroundColor))
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Self.paper)
 
             switch stamp.style {
             case .boxed:
@@ -160,7 +179,7 @@ private struct StampPreviewCell: View {
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(stamp.swiftPrimaryColor)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.5) // long titles ("NOT FOR PUBLIC RELEASE") shrink instead of truncating
                         .padding(.horizontal, 4)
                 }
                 .padding(6)
@@ -217,10 +236,21 @@ private struct StampPreviewCell: View {
             }
         }
         .frame(height: 52)
+        .frame(maxWidth: .infinity)
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(isSelected ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            // Drawn inside the tile: a centred 2 pt stroke was clipped at the grid's edges.
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(hovering ? 0.3 : 0.12),
+                              lineWidth: isSelected ? 2 : 1)
         )
+        .shadow(color: .black.opacity(hovering || isSelected ? 0.16 : 0), radius: 4, y: 2)
+        .scaleEffect(hovering ? 1.03 : 1)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .animation(.spring(response: 0.24, dampingFraction: 0.78), value: hovering)
+        .animation(.easeOut(duration: 0.14), value: isSelected)
+        .accessibilityLabel(stamp.title)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
@@ -319,10 +349,8 @@ private struct AddCustomStampSheet: View {
                     ),
                     isSelected: false
                 )
-                .frame(width: 140, height: 48)
-                .padding(8)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .cornerRadius(8)
+                .frame(width: 150)
+                .allowsHitTesting(false)
             }
 
             Spacer()

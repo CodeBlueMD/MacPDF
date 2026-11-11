@@ -25,15 +25,25 @@ struct ContentView: View {
                     ModeBar(model: model)
                     Divider()
                     PDFKitView(pdfView: model.pdfView)
-                        .overlay(alignment: .bottom) { statusOverlay }
+                        .overlay(alignment: .bottom) {
+                            statusOverlay
+                                .animation(.easeInOut(duration: 0.2), value: model.toast)
+                                .animation(.easeInOut(duration: 0.2), value: model.tool)
+                                .animation(.easeInOut(duration: 0.2), value: model.progress == nil)
+                        }
                 }
 
                 if model.showStampSidebar {
-                    Divider()
-                    StampSidebarView(model: model)
-                        .transition(.move(edge: .trailing))
+                    HStack(spacing: 0) {
+                        Divider()
+                        StampSidebarView(model: model)
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
+            // The sidebar is toggled from several places without `withAnimation`, so its transition
+            // never ran and the panel snapped in. Animating on the flag covers every caller.
+            .animation(.spring(response: 0.32, dampingFraction: 0.9), value: model.showStampSidebar)
         }
         .alert(model.message ?? "", isPresented: Binding(
             get: { model.message != nil },
@@ -98,6 +108,7 @@ struct ContentView: View {
             .padding(12)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(.bottom, 20)
+            .transition(.opacity)
         } else if let toast = model.toast {
             Text(toast)
                 .padding(.horizontal, 14)
@@ -109,10 +120,13 @@ struct ContentView: View {
             Text(hint)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
                 .background(.regularMaterial, in: Capsule())
+                .padding(.horizontal, 16)
                 .padding(.bottom, 20)
+                .transition(.opacity)
         }
     }
 
