@@ -352,7 +352,10 @@ final class DocumentModel: ObservableObject {
 
     /// A vector-drawn stamp badge rendered with CoreGraphics so it stays crisp at all zoom levels.
     func addStamp(at point: CGPoint, on page: PDFPage) {
-        let stamp = StampAnnotation(item: activeStamp, center: point)
+        var item = activeStamp
+        // The REVISED stamp shows when it was placed, not when the app launched.
+        if item.style == .dateTime { item.subtitle = StampCatalog.dynamicDateString() }
+        let stamp = StampAnnotation(item: item, center: point)
         add(stamp, to: page)
     }
 

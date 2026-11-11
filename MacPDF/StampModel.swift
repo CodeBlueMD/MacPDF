@@ -41,8 +41,11 @@ struct StampItem: Identifiable, Codable, Equatable {
     var backgroundColor: NSColor {
         switch style {
         case .boxed, .dateTime:
+            // Custom stamps default bgHex to the text color; use a light tint so the text stays readable.
+            if bgHex.caseInsensitiveCompare(colorHex) == .orderedSame { return primaryColor.withAlphaComponent(0.12) }
             return NSColor(hex: bgHex) ?? primaryColor.withAlphaComponent(0.12)
         case .tagArrow:
+            if bgHex.caseInsensitiveCompare(colorHex) == .orderedSame { return primaryColor.withAlphaComponent(0.25) }
             return NSColor(hex: bgHex) ?? primaryColor
         case .mark, .plainText:
             return .clear
