@@ -5,49 +5,68 @@ import PDFKit
 let fixturesDir = URL(fileURLWithPath: "/Users/suthak/Projects/MacPDF/MacPDFTests/Fixtures")
 try? FileManager.default.createDirectory(at: fixturesDir, withIntermediateDirectories: true)
 
+func makeCleanPDF(objects: [(id: Int, body: String)], catalogId: Int) -> Data {
+    var out = Data("%PDF-1.4\n".utf8)
+    var offsets: [Int: Int] = [:]
+    for obj in objects {
+        offsets[obj.id] = out.count
+        let header = "\(obj.id) 0 obj\n"
+        out.append(Data(header.utf8))
+        out.append(Data(obj.body.utf8))
+        out.append(Data("\nendobj\n".utf8))
+    }
+    let xrefPos = out.count
+    let maxId = offsets.keys.max() ?? 0
+    var xref = "xref\n0 \(maxId + 1)\n0000000000 65535 f \n"
+    for i in 1...maxId {
+        if let off = offsets[i] {
+            xref += String(format: "%010d 00000 n \n", off)
+        } else {
+            xref += "0000000000 00000 f \n"
+        }
+    }
+    xref += "trailer\n<< /Size \(maxId + 1) /Root \(catalogId) 0 R >>\nstartxref\n\(xrefPos)\n%%EOF\n"
+    out.append(Data(xref.utf8))
+    return out
+}
+
 // 1. plain-text.pdf
 do {
     let url = fixturesDir.appendingPathComponent("plain-text.pdf")
-    let box = CGRect(x: 0, y: 0, width: 612, height: 792)
-    let data = NSMutableData()
-    let consumer = CGDataConsumer(data: data as CFMutableData)!
-    var mediaBox = box
-    let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil)!
-    ctx.beginPDFPage(nil)
-
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
-
-    let titleAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont(name: "Helvetica-Bold", size: 18) ?? NSFont.boldSystemFont(ofSize: 18),
-        .foregroundColor: NSColor.black
+    let content = """
+BT
+/F1 18 Tf
+54 720 Td
+(CONFIDENTIAL MEDICAL REPORT) Tj
+ET
+BT
+/F2 12 Tf
+54 670 Td
+(Patient ID: PT-98234-X) Tj
+0 -24 Td
+(Subject: Routine post-operative evaluation) Tj
+0 -24 Td
+(SSN: 000-12-3456) Tj
+0 -24 Td
+(Date of Birth: January 15, 1980) Tj
+0 -24 Td
+(Secret Code: ALPHA-OMEGA-99) Tj
+0 -24 Td
+(Diagnosis: Healing well with no observed complications.) Tj
+0 -24 Td
+(Recommendations: Continue prescribed physical therapy twice weekly.) Tj
+ET
+"""
+    let objs: [(id: Int, body: String)] = [
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+        (3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>"),
+        (4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"),
+        (5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+        (6, "<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream")
     ]
-    NSAttributedString(string: "CONFIDENTIAL MEDICAL REPORT", attributes: titleAttrs)
-        .draw(at: CGPoint(x: 54, y: 720))
-
-    let bodyAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont(name: "Helvetica", size: 12) ?? NSFont.systemFont(ofSize: 12),
-        .foregroundColor: NSColor.black
-    ]
-    let lines = [
-        "Patient ID: PT-98234-X",
-        "Subject: Routine post-operative evaluation",
-        "SSN: 000-12-3456",
-        "Date of Birth: January 15, 1980",
-        "Secret Code: ALPHA-OMEGA-99",
-        "Diagnosis: Healing well with no observed complications.",
-        "Recommendations: Continue prescribed physical therapy twice weekly."
-    ]
-    var y = 670.0
-    for line in lines {
-        NSAttributedString(string: line, attributes: bodyAttrs).draw(at: CGPoint(x: 54, y: y))
-        y -= 24.0
-    }
-
-    NSGraphicsContext.restoreGraphicsState()
-    ctx.endPDFPage()
-    ctx.closePDF()
-    try (data as Data).write(to: url)
+    let data = makeCleanPDF(objects: objs, catalogId: 1)
+    try data.write(to: url)
     print("Created plain-text.pdf")
 }
 
@@ -152,33 +171,28 @@ do {
 // 4. rotated-page.pdf
 do {
     let url = fixturesDir.appendingPathComponent("rotated-page.pdf")
-    let box = CGRect(x: 0, y: 0, width: 612, height: 792)
-    let data = NSMutableData()
-    let consumer = CGDataConsumer(data: data as CFMutableData)!
-    var mediaBox = box
-    let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil)!
-    ctx.beginPDFPage(nil)
-
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
-
-    NSAttributedString(string: "ROTATED DOCUMENT 90 DEGREES", attributes: [
-        .font: NSFont.boldSystemFont(ofSize: 18),
-        .foregroundColor: NSColor.black
-    ]).draw(at: CGPoint(x: 100, y: 600))
-
-    NSAttributedString(string: "Secret Key: ROT-998811", attributes: [
-        .font: NSFont.systemFont(ofSize: 13),
-        .foregroundColor: NSColor.black
-    ]).draw(at: CGPoint(x: 100, y: 560))
-
-    NSGraphicsContext.restoreGraphicsState()
-    ctx.endPDFPage()
-    ctx.closePDF()
-
-    let pdf = PDFDocument(data: data as Data)!
-    pdf.page(at: 0)?.rotation = 90
-    pdf.write(to: url)
+    let content = """
+BT
+/F1 18 Tf
+100 600 Td
+(ROTATED DOCUMENT 90 DEGREES) Tj
+ET
+BT
+/F2 13 Tf
+100 560 Td
+(Secret Key: ROT-998811) Tj
+ET
+"""
+    let objs: [(id: Int, body: String)] = [
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+        (3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>"),
+        (4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"),
+        (5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+        (6, "<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream")
+    ]
+    let data = makeCleanPDF(objects: objs, catalogId: 1)
+    try data.write(to: url)
     print("Created rotated-page.pdf")
 }
 

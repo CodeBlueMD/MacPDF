@@ -18,6 +18,17 @@ final class PDFFile: ReferenceFileDocument {
         pdf.insert(page, at: 0)
     }
 
+    init(pdf: PDFDocument) {
+        self.pdf = pdf
+    }
+
+    convenience init(data: Data) throws {
+        guard let doc = PDFDocument(data: data) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.init(pdf: doc)
+    }
+
     init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents,
               let pdf = PDFDocument(data: data) else {
@@ -31,10 +42,15 @@ final class PDFFile: ReferenceFileDocument {
         // Open edits are committed on the main thread before saving starts (see MacPDFView).
         if Thread.isMainThread {
             willSave?()
-        } else {
-            DispatchQueue.main.sync {
-                self.willSave?()
+        } else if let willSave = self.willSave {
+            // Avoid deadlocking with DispatchQueue.main.sync if the main thread is blocked waiting
+            // for document saving or app quitting.
+            let sema = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async {
+                willSave()
+                sema.signal()
             }
+            _ = sema.wait(timeout: .now() + .milliseconds(500))
         }
         guard let data = pdf.dataRepresentation() else {
             throw CocoaError(.fileWriteUnknown)

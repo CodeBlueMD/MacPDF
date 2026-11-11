@@ -68,7 +68,6 @@ extension DocumentModel {
 
     @MainActor
     func burnRedactions(on page: PDFPage) async {
-        burnTasks[ObjectIdentifier(page)]?.cancel()
         burnTasks.removeValue(forKey: ObjectIdentifier(page))
         let marks = page.annotations.filter { $0.tag == .redaction }
         guard !marks.isEmpty, pdf.index(for: page) != NSNotFound else { return }
@@ -86,10 +85,44 @@ extension DocumentModel {
 
     @MainActor
     func burnAllPendingRedactions() async {
+        for (_, task) in burnTasks {
+            task.cancel()
+        }
+        burnTasks.removeAll()
+
         for i in 0..<pdf.pageCount {
             if let page = pdf.page(at: i), page.annotations.contains(where: { $0.tag == .redaction }) {
                 await burnRedactions(on: page)
             }
+        }
+    }
+
+    func burnAllPendingRedactionsSync() {
+        guard (0..<pdf.pageCount).contains(where: {
+            pdf.page(at: $0)?.annotations.contains { $0.tag == .redaction } == true
+        }) else { return }
+
+        if Thread.isMainThread {
+            for (_, task) in burnTasks { task.cancel() }
+            burnTasks.removeAll()
+
+            var done = false
+            Task { @MainActor [weak self] in
+                await self?.burnAllPendingRedactions()
+                done = true
+            }
+
+            let limit = Date(timeIntervalSinceNow: 15.0)
+            while !done && Date() < limit {
+                RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+            }
+        } else {
+            let sema = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async { [weak self] in
+                self?.burnAllPendingRedactionsSync()
+                sema.signal()
+            }
+            _ = sema.wait(timeout: .now() + .seconds(15))
         }
     }
 }

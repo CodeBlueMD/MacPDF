@@ -60,9 +60,7 @@ struct ContentView: View {
         .onAppear {
             file.willSave = { [weak model] in
                 model?.pdfView.endInlineEdit()
-                Task { @MainActor [weak model] in
-                    await model?.burnAllPendingRedactions()
-                }
+                model?.burnAllPendingRedactionsSync()
             }
         }
         .onChange(of: model.tool) { _, tool in
