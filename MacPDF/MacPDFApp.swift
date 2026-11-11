@@ -4,6 +4,7 @@ import SwiftUI
 struct MacPDFApp: App {
     init() {
         NSWindow.allowsAutomaticWindowTabbing = true
+        UserDefaults.standard.register(defaults: ["AppleWindowTabbingMode": "always"])
     }
 
     var body: some Scene {

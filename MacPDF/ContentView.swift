@@ -20,11 +20,19 @@ struct ContentView: View {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 460)
         } detail: {
-            VStack(spacing: 0) {
-                ModeBar(model: model)
-                Divider()
-                PDFKitView(pdfView: model.pdfView)
-                    .overlay(alignment: .bottom) { statusOverlay }
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    ModeBar(model: model)
+                    Divider()
+                    PDFKitView(pdfView: model.pdfView)
+                        .overlay(alignment: .bottom) { statusOverlay }
+                }
+
+                if model.showStampSidebar {
+                    Divider()
+                    StampSidebarView(model: model)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
         .alert(model.message ?? "", isPresented: Binding(
@@ -193,14 +201,38 @@ struct PDFKitView: NSViewRepresentable {
     func updateNSView(_ nsView: MacPDFView, context: Context) {}
 }
 
-/// Opens new documents as tabs in the existing window, like Safari.
+/// Opens new documents as tabs in the existing window, like Safari and PDF Expert.
 private struct WindowTabbing: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { view.window?.tabbingMode = .preferred }
-        return view
+        TabbingView()
     }
+
     func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private final class TabbingView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window = window else { return }
+        window.tabbingIdentifier = "MacPDFDocumentWindow"
+        window.tabbingMode = .preferred
+
+        DispatchQueue.main.async { [weak window] in
+            guard let currentWindow = window else { return }
+            // Find another existing, visible MacPDF document window to tab into
+            if let existingWindow = NSApp.windows.first(where: {
+                $0 !== currentWindow &&
+                $0.isVisible &&
+                !$0.isMiniaturized &&
+                !($0 is NSPanel) &&
+                $0.tabbingIdentifier == "MacPDFDocumentWindow"
+            }) {
+                if !(existingWindow.tabbedWindows?.contains(currentWindow) ?? false) {
+                    existingWindow.addTabbedWindow(currentWindow, ordered: .above)
+                }
+            }
+        }
+    }
 }
 
 private struct NoteEditor: View {

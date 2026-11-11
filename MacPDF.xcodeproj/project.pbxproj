@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		014A7A27C6C1E378ED13C1FA /* StampSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE07D3CF035D582A1CCC7A6 /* StampSidebarView.swift */; };
 		0423267A71B06B5FDE67F586 /* PageTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA1EDDDC894F0A2332887DA /* PageTools.swift */; };
 		0A60CB1A4287EE130FB380BE /* MacPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97F16243BEBBDBF3CA204AE /* MacPDFView.swift */; };
+		10429FB3E7700119B3ED35C5 /* StampModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C3DD066C6099EC100035EA /* StampModel.swift */; };
 		1494AC13CBA9CF5B742222BE /* TextEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05430E6686AA9DB38B5FF0C /* TextEditing.swift */; };
 		2164948B45FA7ADB1AB8CAB4 /* ContentSurgery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */; };
 		24223F44DD8F834A8529F821 /* PDFFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC24EB343E827AF3D06C31C /* PDFFile.swift */; };
@@ -18,10 +20,12 @@
 		514DCBE8D563BEC633C53385 /* libpdfium.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 8CE807045F35C32FC725B2D2 /* libpdfium.dylib */; };
 		53F5BBC23ED0B04C234B9108 /* Compare.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C1A5D9C9CC17786498CED0 /* Compare.swift */; };
 		5432D8CC7274C7EADEB682D2 /* PDFium.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F0F587EB1AAF2B7335DB1D /* PDFium.swift */; };
+		7DCA09C4F48B9A9114421BED /* RubberStampIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BD6AD3C32B95D4206E80A7 /* RubberStampIcon.swift */; };
 		7E3F2C65543C4E0C0E792081 /* CleanCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D5DAB5444C22A8806DF29E /* CleanCopy.swift */; };
 		7FCD90113D16FECFDB215616 /* ImageEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0269C7E635AEFB2915EFA4AF /* ImageEditing.swift */; };
 		847F3EC8A0D9FCAA04A23202 /* Export.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4ECFED9A79115C38F62CD2 /* Export.swift */; };
 		956ADCA0199D047B04C1E7AA /* Assistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E28EFDD96B736693610EDD1 /* Assistant.swift */; };
+		A26A4682393F31C60FDEE085 /* StampAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6C3F309944E8FF25961EF6 /* StampAnnotation.swift */; };
 		AD19ADC4EAA2399246971C2E /* ModeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E767DCA8C42944A6967749 /* ModeBar.swift */; };
 		BCA2B7A7523FB67D93C50BF4 /* OCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FA36805CEC1312F23E1A76 /* OCR.swift */; };
 		C733F645E21C345D8A6CD307 /* PatientInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */; };
@@ -62,7 +66,9 @@
 		6E28EFDD96B736693610EDD1 /* Assistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assistant.swift; sourceTree = "<group>"; };
 		75FA36805CEC1312F23E1A76 /* OCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCR.swift; sourceTree = "<group>"; };
 		76BD6DA84E963C0BBC6C27B7 /* MacPDFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPDFApp.swift; sourceTree = "<group>"; };
+		87C3DD066C6099EC100035EA /* StampModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StampModel.swift; sourceTree = "<group>"; };
 		8CE807045F35C32FC725B2D2 /* libpdfium.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpdfium.dylib; path = Vendor/pdfium/lib/libpdfium.dylib; sourceTree = "<group>"; };
+		8F6C3F309944E8FF25961EF6 /* StampAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StampAnnotation.swift; sourceTree = "<group>"; };
 		9375F5C3B19684E769487991 /* MacPDF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacPDF.entitlements; sourceTree = "<group>"; };
 		9614E5762C6F85E1284F85BD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A0C1A5D9C9CC17786498CED0 /* Compare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compare.swift; sourceTree = "<group>"; };
@@ -74,7 +80,9 @@
 		E05430E6686AA9DB38B5FF0C /* TextEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextEditing.swift; sourceTree = "<group>"; };
 		E7C8E5B39806484A1929B939 /* PatientInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientInfo.swift; sourceTree = "<group>"; };
 		E9F5692142BCC3440402C057 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F0BD6AD3C32B95D4206E80A7 /* RubberStampIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RubberStampIcon.swift; sourceTree = "<group>"; };
 		F1E767DCA8C42944A6967749 /* ModeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeBar.swift; sourceTree = "<group>"; };
+		FDE07D3CF035D582A1CCC7A6 /* StampSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StampSidebarView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,7 +147,11 @@
 				A1759BD4DDFEEB497817FC10 /* PatientInfoSheet.swift */,
 				4AC24EB343E827AF3D06C31C /* PDFFile.swift */,
 				10F0F587EB1AAF2B7335DB1D /* PDFium.swift */,
+				F0BD6AD3C32B95D4206E80A7 /* RubberStampIcon.swift */,
 				34E1DE9F92CB9D03695CC327 /* SidebarView.swift */,
+				8F6C3F309944E8FF25961EF6 /* StampAnnotation.swift */,
+				87C3DD066C6099EC100035EA /* StampModel.swift */,
+				FDE07D3CF035D582A1CCC7A6 /* StampSidebarView.swift */,
 				E05430E6686AA9DB38B5FF0C /* TextEditing.swift */,
 				0F852F39CED864BE02EA6393 /* Tools.swift */,
 			);
@@ -236,7 +248,11 @@
 				0423267A71B06B5FDE67F586 /* PageTools.swift in Sources */,
 				356E9B1712F8E0B68BFE5341 /* PatientInfo.swift in Sources */,
 				C733F645E21C345D8A6CD307 /* PatientInfoSheet.swift in Sources */,
+				7DCA09C4F48B9A9114421BED /* RubberStampIcon.swift in Sources */,
 				4B69DBCCC4412D2ED0E429DE /* SidebarView.swift in Sources */,
+				A26A4682393F31C60FDEE085 /* StampAnnotation.swift in Sources */,
+				10429FB3E7700119B3ED35C5 /* StampModel.swift in Sources */,
+				014A7A27C6C1E378ED13C1FA /* StampSidebarView.swift in Sources */,
 				1494AC13CBA9CF5B742222BE /* TextEditing.swift in Sources */,
 				E9F4CA7A4B47A443E92B3AA8 /* Tools.swift in Sources */,
 			);

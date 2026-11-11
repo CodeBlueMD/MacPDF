@@ -150,7 +150,11 @@ struct ModeBar: View {
 
     private func itemLabel(_ title: String, _ symbol: String, labeled: Bool) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: labeled ? 15 : 17))
+            if symbol == "rubber.stamp" || symbol == "seal" {
+                RubberStampIcon(size: labeled ? 15 : 17, color: .primary)
+            } else {
+                Image(systemName: symbol).font(.system(size: labeled ? 15 : 17))
+            }
             if labeled { Text(title) }
         }
         .padding(.horizontal, labeled ? 10 : 8)
@@ -191,14 +195,20 @@ struct ModeBar: View {
     }
 
     private var stampMenu: some View {
-        splitButton("Stamp", "seal", labeled: model.mode == .fillSign, selected: model.tool == .stamp,
-                    help: "Stamp: \(model.stampKind.title)") {
-            model.tool = model.tool == .stamp ? .select : .stamp
-        } options: {
-            ForEach(StampKind.allCases) { kind in
-                Button(kind.title) { model.stampKind = kind; model.tool = .stamp }
+        Button {
+            model.showStampSidebar.toggle()
+            if model.showStampSidebar {
+                model.tool = .stamp
+            } else if model.tool == .stamp {
+                model.tool = .select
             }
+        } label: {
+            itemLabel("Stamp", "rubber.stamp", labeled: model.mode == .fillSign)
         }
+        .buttonStyle(.plain)
+        .frame(height: 30)
+        .background(selectedBackground(model.tool == .stamp || model.showStampSidebar))
+        .help("Stamps — customize and choose standard stamps")
     }
 
     private func signatureButton(labeled: Bool) -> some View {

@@ -81,7 +81,7 @@ enum Tool: Hashable {
         case .textBox: "character.textbox"
         case .shape: "square.on.circle"
         case .note: "text.bubble"
-        case .stamp: "seal"
+        case .stamp: "rubber.stamp"
         case .signature: "signature"
         case .snapshot: "rectangle.dashed"
         case .editText: "character.cursor.ibeam"

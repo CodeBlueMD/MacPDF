@@ -33,6 +33,9 @@ final class DocumentModel: ObservableObject {
     @Published var toolColors: [Tool: Color] = [:]
     @Published var shapeKind: ShapeKind = .rectangle
     @Published var stampKind: StampKind = .approved
+    @Published var showStampSidebar = false
+    @Published var activeStamp: StampItem = StampCatalog.standardStamps[0]
+    @Published var customStamps: [StampItem] = StampCatalog.loadCustomStamps()
     /// Image chosen for the Image tool, placed on the next click or drag.
     @Published var pendingImage: NSImage?
     /// Image on the page selected with Edit → Image.
@@ -328,41 +331,43 @@ final class DocumentModel: ObservableObject {
         add(makeShape(from: start, to: end), to: page)
     }
 
-    /// A tinted badge with bold colored text. Built from FreeText because PDFKit draws real Stamp
-    /// annotations as an empty crossed-out box.
+    func selectStamp(_ stamp: StampItem) {
+        activeStamp = stamp
+        tool = .stamp
+    }
+
+    func addCustomStamp(_ stamp: StampItem) {
+        customStamps.append(stamp)
+        StampCatalog.saveCustomStamps(customStamps)
+        selectStamp(stamp)
+    }
+
+    func deleteCustomStamp(_ stamp: StampItem) {
+        customStamps.removeAll { $0.id == stamp.id }
+        StampCatalog.saveCustomStamps(customStamps)
+        if activeStamp.id == stamp.id {
+            activeStamp = StampCatalog.standardStamps[0]
+        }
+    }
+
+    /// A vector-drawn stamp badge rendered with CoreGraphics so it stays crisp at all zoom levels.
     func addStamp(at point: CGPoint, on page: PDFPage) {
-        let text = stampKind.title.uppercased()
-        let font = NSFont.systemFont(ofSize: 20, weight: .heavy)
-        let size = (text as NSString).size(withAttributes: [.font: font])
-        let bounds = CGRect(x: point.x - size.width / 2 - 12, y: point.y - size.height / 2 - 6,
-                            width: size.width + 24, height: size.height + 12)
-        let stamp = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
-        Self.style(stamp, font: font, textColor: stampKind.color, background: stampKind.color.blended(withFraction: 0.88, of: .white) ?? .white)
-        stamp.alignment = .center
-        stamp.contents = text
-        stamp.tag = .stamp
+        let stamp = StampAnnotation(item: activeStamp, center: point)
         add(stamp, to: page)
     }
 
+    /// Vector-rendered date and mark text annotations that remain pin-sharp at any zoom.
     func addFillText(_ tool: Tool, at point: CGPoint, on page: PDFPage) {
         let text: String
-        let size: CGFloat
         switch tool {
         case .date:
             text = Date.now.formatted(date: .numeric, time: .omitted)
-            size = 14
         case .checkmark:
             text = "✓"
-            size = 22
         default:
             text = "✗"
-            size = 22
         }
-        let font = NSFont.systemFont(ofSize: size, weight: tool == .date ? .regular : .bold)
-        let origin = CGRect(x: point.x - size / 3, y: point.y - size / 2, width: 0, height: 0)
-        let annotation = PDFAnnotation(bounds: Self.fit(origin, text: text, font: font), forType: .freeText, withProperties: nil)
-        Self.style(annotation, font: font, textColor: nsColor, background: .clear)
-        annotation.contents = text
+        let annotation = VectorFillAnnotation(text: text, textColor: nsColor, at: point, isDate: tool == .date)
         add(annotation, to: page)
     }
 
