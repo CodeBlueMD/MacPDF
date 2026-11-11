@@ -57,7 +57,14 @@ struct ContentView: View {
         .onAppear { model.undoManager = undoManager }
         .onChange(of: undoManager) { _, manager in model.undoManager = manager }
         .onChange(of: model.textStyle) { _, _ in model.pdfView.applyEditorStyle() }
-        .onAppear { file.willSave = { [weak model] in model?.pdfView.endInlineEdit() } }
+        .onAppear {
+            file.willSave = { [weak model] in
+                model?.pdfView.endInlineEdit()
+                Task { @MainActor [weak model] in
+                    await model?.burnAllPendingRedactions()
+                }
+            }
+        }
         .onChange(of: model.tool) { _, tool in
             model.pdfView.endInlineEdit()
             model.pdfView.window?.invalidateCursorRects(for: model.pdfView)

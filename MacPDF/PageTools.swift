@@ -67,21 +67,30 @@ extension DocumentModel {
     }
 
     @MainActor
-    private func burnRedactions(on page: PDFPage) async {
+    func burnRedactions(on page: PDFPage) async {
+        burnTasks[ObjectIdentifier(page)]?.cancel()
+        burnTasks.removeValue(forKey: ObjectIdentifier(page))
         let marks = page.annotations.filter { $0.tag == .redaction }
         guard !marks.isEmpty, pdf.index(for: page) != NSNotFound else { return }
         let fills = marks.map { (rect: $0.bounds, color: ($0.interiorColor ?? .black).withAlphaComponent(1)) }
         let flattened = await OCR.rasterized(page, fills: fills) { annotation in
             annotation.tag != .redaction && !fills.contains { $0.rect.intersects(annotation.bounds) }
         }
-        // A newer mark on this page restarted the burn; that run will include these marks too.
         guard !Task.isCancelled, let flattened else { return }
-        // Swap the per-mark undo entries for one page-level step that brings back the clean original.
         if let token = burnTokens.removeValue(forKey: ObjectIdentifier(page)) {
             undoManager?.removeAllActions(withTarget: token)
         }
         marks.forEach(page.removeAnnotation)
         replace(page, with: flattened, actionName: "Redact")
+    }
+
+    @MainActor
+    func burnAllPendingRedactions() async {
+        for i in 0..<pdf.pageCount {
+            if let page = pdf.page(at: i), page.annotations.contains(where: { $0.tag == .redaction }) {
+                await burnRedactions(on: page)
+            }
+        }
     }
 }
 

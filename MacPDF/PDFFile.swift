@@ -29,7 +29,13 @@ final class PDFFile: ReferenceFileDocument {
     func snapshot(contentType: UTType) throws -> Data {
         // Saves and autosaves can run off the main thread, where touching the editor views crashes.
         // Open edits are committed on the main thread before saving starts (see MacPDFView).
-        if Thread.isMainThread { willSave?() }
+        if Thread.isMainThread {
+            willSave?()
+        } else {
+            DispatchQueue.main.sync {
+                self.willSave?()
+            }
+        }
         guard let data = pdf.dataRepresentation() else {
             throw CocoaError(.fileWriteUnknown)
         }

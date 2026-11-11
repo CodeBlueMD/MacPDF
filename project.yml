@@ -45,3 +45,38 @@ targets:
             CFBundleTypeRole: Editor
             LSHandlerRank: Alternate
             LSItemContentTypes: [com.adobe.pdf]
+
+  MacPDFTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MacPDFTests
+        excludes:
+          - "make-fixtures.swift"
+    dependencies:
+      - target: MacPDF
+      - framework: Vendor/pdfium/lib/libpdfium.dylib
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.suthak.MacPDFTests
+        PRODUCT_NAME: MacPDFTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_OBJC_BRIDGING_HEADER: MacPDF/MacPDF-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/pdfium/include
+        LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/Vendor/pdfium/lib
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks @loader_path/../Frameworks"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+
+schemes:
+  MacPDF:
+    build:
+      targets:
+        MacPDF: all
+        MacPDFTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MacPDFTests

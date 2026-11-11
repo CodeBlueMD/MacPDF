@@ -327,6 +327,18 @@ enum ContentSurgery {
         return (updated, hadMetadata)
     }
 
+    /// Decodes all content streams in the PDF (inflating FlateDecode streams) to inspect raw operator content.
+    static func allDecodedContentStreams(from data: Data) -> [String] {
+        guard let file = PDFFile(data: data) else { return [] }
+        var results: [String] = []
+        for (ref, _) in file.offsets {
+            if let decoded = file.decodedStream(ref), let str = String(data: decoded, encoding: .isoLatin1) {
+                results.append(str)
+            }
+        }
+        return results
+    }
+
     // MARK: Minimal PDF file access (classic xref table, as PDFKit writes)
 
     struct PDFFile {
