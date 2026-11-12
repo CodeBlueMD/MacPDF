@@ -164,6 +164,20 @@ final class PageEditor {
         return CGPoint(x: CGFloat(m.e), y: CGFloat(m.f))
     }
 
+    /// The 2D transformation matrix of an object on the page.
+    func matrix(of object: Object) -> FS_MATRIX? {
+        var m = FS_MATRIX()
+        guard FPDFPageObj_GetMatrix(object.handle, &m) != 0 else { return nil }
+        return m
+    }
+
+    /// Whether a text object is rotated or skewed relative to upright horizontal text.
+    func isRotatedOrSkewed(_ object: Object) -> Bool {
+        guard let m = matrix(of: object) else { return false }
+        // For unrotated horizontal text: b and c are approximately 0, while a is positive.
+        return abs(m.b) > 0.01 || abs(m.c) > 0.01 || m.a <= 0.01
+    }
+
     /// Applies `transform` (in page coordinates) on top of the object's current placement.
     func transform(_ object: Object, by t: CGAffineTransform) {
         changedExistingObjects = true

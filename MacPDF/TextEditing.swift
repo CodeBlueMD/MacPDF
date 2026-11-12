@@ -278,9 +278,19 @@ extension DocumentModel {
                                 width: target.wraps ? target.rect.width : block.rect.width, height: block.rect.height)
         let offset = CGPoint(x: target.rect.minX - block.rect.minX, y: target.rect.maxY - block.rect.maxY)
         let lines = TextLayout.runs(content, style: style, in: layoutRect, wraps: target.wraps)
+
+        // Glyph validation guardrail: verify that every typed character maps to a valid glyph in the font
+        for run in lines {
+            if !run.font.hasGlyphs(for: run.text) {
+                message = "The font '\(run.font.displayName ?? run.font.fontName)' does not have glyphs for all typed characters."
+                return
+            }
+        }
+
         var base = page
         var shift = CGPoint.zero
         var removeWithPDFium = false
+        var rotationDetected = false
 
         if block.replacesText {
             let region = block.rect.insetBy(dx: -2, dy: -1)
@@ -313,6 +323,11 @@ extension DocumentModel {
         let edited = PDFium.edit(base) { editor in
             if removeWithPDFium {
                 let originals = editor.textObjects.filter { region.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }
+                // Rotation/skew guardrail: disallow inline reflow on rotated or skewed text
+                if originals.contains(where: editor.isRotatedOrSkewed) {
+                    rotationDetected = true
+                    return false
+                }
                 if let first = originals.max(by: { $0.bounds.maxY < $1.bounds.maxY }),
                    let baseline = editor.origin(of: first), let firstLine = lines.first {
                     shift.y = baseline.y - firstLine.origin.y
@@ -336,7 +351,11 @@ extension DocumentModel {
             return true
         }
         guard let edited else {
-            message = "Couldn't rewrite this text. The PDF's text may be stored in a way MacPDF can't edit yet."
+            if rotationDetected {
+                message = "Rotated or skewed text cannot be reflowed in-place."
+            } else {
+                message = "Couldn't rewrite this text. The PDF's text may be stored in a way MacPDF can't edit yet."
+            }
             return
         }
         if let pushed {
@@ -351,5 +370,20 @@ extension DocumentModel {
             }
         }
         replace(page, with: edited, actionName: actionName)
+    }
+}
+
+extension NSFont {
+    /// Validates whether the font provides a valid glyph for every character in `text`.
+    /// Returns false if any character maps to glyph 0 (.notdef).
+    func hasGlyphs(for text: String) -> Bool {
+        let utf16 = Array(text.utf16)
+        guard !utf16.isEmpty else { return true }
+        var glyphs = [CGGlyph](repeating: 0, count: utf16.count)
+        let ctFont = self as CTFont
+        guard CTFontGetGlyphsForCharacters(ctFont, utf16, &glyphs, utf16.count) else {
+            return false
+        }
+        return !glyphs.contains(0)
     }
 }

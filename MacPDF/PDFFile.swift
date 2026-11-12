@@ -10,6 +10,11 @@ final class PDFFile: ReferenceFileDocument {
     /// Commits any edit still open in the window before the file is written.
     var willSave: (() -> Void)?
 
+    /// Safety backup tracking: captures original bytes on file load and ensures a non-destructive
+    /// backup is written to disk before the first save.
+    private var originalData: Data?
+    private var hasCreatedBackup = false
+
     /// File > New creates a single blank US Letter page.
     init() {
         pdf = PDFDocument()
@@ -27,6 +32,7 @@ final class PDFFile: ReferenceFileDocument {
             throw CocoaError(.fileReadCorruptFile)
         }
         self.init(pdf: doc)
+        self.originalData = data
     }
 
     init(configuration: ReadConfiguration) throws {
@@ -35,36 +41,90 @@ final class PDFFile: ReferenceFileDocument {
             throw CocoaError(.fileReadCorruptFile)
         }
         self.pdf = pdf
+        self.originalData = data
     }
 
     func snapshot(contentType: UTType) throws -> Data {
-        // Saves and autosaves can run off the main thread, where touching the editor views crashes.
-        // Open edits are committed on the main thread before saving starts (see MacPDFView).
+        // Saves and autosaves can run off the main thread, where touching the editor views or PDF
+        // pages directly races with active user interaction.
+        // Both the redaction check and serialization are performed atomically on the main thread
+        // to prevent race conditions.
         if Thread.isMainThread {
-            willSave?()
-        } else if let willSave = self.willSave {
-            // Avoid deadlocking with DispatchQueue.main.sync if the main thread is blocked waiting
-            // for document saving or app quitting.
+            return try MainActor.assumeIsolated {
+                try prepareAndSerializeSnapshot()
+            }
+        } else {
+            var capturedData: Data?
+            var capturedError: Error?
             let sema = DispatchSemaphore(value: 0)
-            DispatchQueue.main.async {
-                willSave()
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else {
+                    sema.signal()
+                    return
+                }
+                do {
+                    capturedData = try MainActor.assumeIsolated {
+                        try self.prepareAndSerializeSnapshot()
+                    }
+                } catch {
+                    capturedError = error
+                }
                 sema.signal()
             }
-            _ = sema.wait(timeout: .now() + .milliseconds(500))
-        }
 
-        // Fail-closed security check: If any pending redaction annotations remain unburned
-        // (e.g. background save while main thread was busy or burn timed out), refuse to write to disk.
+            // Allow sufficient time for Vision OCR rasterization burns (typically 1.5–3s) while
+            // guarding against complete deadlocks.
+            let waitResult = sema.wait(timeout: .now() + .seconds(20))
+            if waitResult == .timedOut {
+                throw CocoaError(.fileWriteUnknown, userInfo: [
+                    NSLocalizedDescriptionKey: "Cannot save document: timed out waiting for document to prepare."
+                ])
+            }
+            if let error = capturedError {
+                throw error
+            }
+            guard let data = capturedData else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            return data
+        }
+    }
+
+    @MainActor
+    private func prepareAndSerializeSnapshot() throws -> Data {
+        // 1. Commit open editor views and burn pending redactions synchronously
+        willSave?()
+
+        // 2. Fail-closed security check: If any pending redaction annotations remain unburned
+        // (e.g. burn was cancelled or failed), refuse to write to disk.
         if hasPendingRedactions {
             throw CocoaError(.fileWriteUnknown, userInfo: [
                 NSLocalizedDescriptionKey: "Cannot save document: pending redactions have not finished burning."
             ])
         }
 
+        // 3. Non-destructive safety backup on first save
+        createSafetyBackupIfNeeded()
+
+        // 4. Serialize data on the main thread for consistency
         guard let data = pdf.dataRepresentation() else {
             throw CocoaError(.fileWriteUnknown)
         }
         return data
+    }
+
+    /// Preserves a timestamped copy of the original document in Caches before first save.
+    private func createSafetyBackupIfNeeded() {
+        guard !hasCreatedBackup, let original = originalData else { return }
+        hasCreatedBackup = true
+        let fm = FileManager.default
+        let backupsDir = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacPDF/Backups", isDirectory: true)
+        try? fm.createDirectory(at: backupsDir, withIntermediateDirectories: true)
+        let filename = "original-backup-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).pdf"
+        let backupURL = backupsDir.appendingPathComponent(filename)
+        try? original.write(to: backupURL)
     }
 
     var hasPendingRedactions: Bool {

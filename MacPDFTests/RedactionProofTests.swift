@@ -356,4 +356,66 @@ final class RedactionProofTests: XCTestCase {
         XCTAssertTrue(extracted.contains("REC-88329-Z") || extracted.contains("88329"),
                       "Other text lines should survive rasterization/OCR")
     }
+
+    @MainActor
+    func testFirstSaveCreatesSafetyBackupInCaches() throws {
+        let url = fixturesURL.appendingPathComponent("plain-text.pdf")
+        let data = try Data(contentsOf: url)
+        let file = try PDFFile(data: data)
+
+        // Snapshotting should generate a non-destructive backup in ~/Library/Caches/MacPDF/Backups/
+        _ = try file.snapshot(contentType: .pdf)
+
+        let fm = FileManager.default
+        let backupsDir = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacPDF/Backups", isDirectory: true)
+        XCTAssertTrue(fm.fileExists(atPath: backupsDir.path), "Backup directory must exist")
+
+        let backups = try fm.contentsOfDirectory(atPath: backupsDir.path)
+            .filter { $0.hasPrefix("original-backup-") && $0.hasSuffix(".pdf") }
+        XCTAssertFalse(backups.isEmpty, "A safety backup file must have been created before first save")
+    }
+
+    func testGlyphValidationRejectsUnsupportedCharacters() {
+        let font = NSFont(name: "Helvetica", size: 12) ?? .systemFont(ofSize: 12)
+
+        // Standard ASCII characters must have valid glyphs
+        XCTAssertTrue(font.hasGlyphs(for: "Hello World 12345!"), "Standard ASCII must have valid glyphs")
+
+        // Private use or non-font characters should fail validation
+        let unsupportedString = "\u{E000}\u{E001}" // Private Use Area characters
+        XCTAssertFalse(font.hasGlyphs(for: unsupportedString), "Missing glyphs must return false")
+    }
+
+    @MainActor
+    func testRoundTripTextEditingReplacesTextSafely() throws {
+        let url = fixturesURL.appendingPathComponent("plain-text.pdf")
+        let doc = try XCTUnwrap(PDFDocument(url: url))
+        let page = try XCTUnwrap(doc.page(at: 0))
+        let model = DocumentModel(pdf: doc)
+
+        // Find existing text block
+        let originalText = "CONFIDENTIAL MEDICAL REPORT"
+        guard let selection = doc.findString(originalText, withOptions: []).first else {
+            XCTFail("Target text '\(originalText)' not found in plain-text.pdf")
+            return
+        }
+
+        let selectionBounds = selection.bounds(for: page)
+        let block = try XCTUnwrap(TextBlock.at(CGPoint(x: selectionBounds.midX, y: selectionBounds.midY), on: page))
+        XCTAssertTrue(block.text.contains("CONFIDENTIAL"), "Hit-tested block must contain CONFIDENTIAL")
+
+        // Replace with new text
+        let newText = "VERIFIED PATIENT DOSSIER"
+        model.writeBlock(block, text: newText, style: block.style, on: page)
+
+        // Verify replacement
+        let updatedPage = try XCTUnwrap(doc.page(at: 0))
+        let updatedString = try XCTUnwrap(updatedPage.string)
+        XCTAssertTrue(updatedString.contains("VERIFIED PATIENT DOSSIER"), "Page string must contain replacement text")
+
+        // Verify surrounding text still intact
+        XCTAssertTrue(updatedString.contains("Patient ID:"), "Surrounding labels must remain intact")
+        XCTAssertTrue(updatedString.contains("000-12-3456"), "Surrounding data must remain intact")
+    }
 }
