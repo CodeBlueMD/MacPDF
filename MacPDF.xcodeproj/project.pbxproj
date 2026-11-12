@@ -10,6 +10,7 @@
 		014A7A27C6C1E378ED13C1FA /* StampSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE07D3CF035D582A1CCC7A6 /* StampSidebarView.swift */; };
 		0423267A71B06B5FDE67F586 /* PageTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA1EDDDC894F0A2332887DA /* PageTools.swift */; };
 		0A60CB1A4287EE130FB380BE /* MacPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B97F16243BEBBDBF3CA204AE /* MacPDFView.swift */; };
+		0F2E0B0D3A1490A932718CB5 /* StampInteractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44461B46667477AB53C5010 /* StampInteractionTests.swift */; };
 		10429FB3E7700119B3ED35C5 /* StampModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C3DD066C6099EC100035EA /* StampModel.swift */; };
 		1494AC13CBA9CF5B742222BE /* TextEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05430E6686AA9DB38B5FF0C /* TextEditing.swift */; };
 		185D57F4B1924E0A748BDA02 /* rotated-page.pdf in Resources */ = {isa = PBXBuildFile; fileRef = 03CA330B8D4C32196B3BEFAD /* rotated-page.pdf */; };
@@ -115,6 +116,7 @@
 		BACE0389263E301EE605640E /* form.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = form.pdf; sourceTree = "<group>"; };
 		C567DE6FF8441E6B327060DF /* FormAutofill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormAutofill.swift; sourceTree = "<group>"; };
 		D0C05960E0F8894952D8C8BB /* MacPDF-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MacPDF-Bridging-Header.h"; sourceTree = "<group>"; };
+		D44461B46667477AB53C5010 /* StampInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StampInteractionTests.swift; sourceTree = "<group>"; };
 		D92CD5BD8AC151FFBFEC6CEF /* MacPDFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacPDFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DDBF6F02B3B744BEF94EF61B /* ContentSurgery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSurgery.swift; sourceTree = "<group>"; };
 		E05430E6686AA9DB38B5FF0C /* TextEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextEditing.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 			children = (
 				534F56A467E6CDBADE882CF9 /* FixtureTests.swift */,
 				4C458F97F2CD58DF7362939F /* RedactionProofTests.swift */,
+				D44461B46667477AB53C5010 /* StampInteractionTests.swift */,
 				06F4C0233CF193A28D229657 /* Fixtures */,
 			);
 			path = MacPDFTests;
@@ -343,6 +346,7 @@
 			files = (
 				2044FD9D241A4D87B28DD61E /* FixtureTests.swift in Sources */,
 				5539C9DA9981613882C30A4C /* RedactionProofTests.swift in Sources */,
+				0F2E0B0D3A1490A932718CB5 /* StampInteractionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

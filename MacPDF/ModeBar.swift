@@ -82,6 +82,10 @@ struct ModeBar: View {
                 gap
                 tool(.note)
                 stampMenu
+                if let annotation = model.selectedAnnotation {
+                    action("Delete \(annotation.displayName)", "trash") { model.deleteSelectedAnnotation() }
+                    action("Duplicate", "plus.rectangle.on.rectangle") { model.duplicateSelectedAnnotation() }
+                }
                 signatureButton(labeled: false)
                 gap
                 tool(.snapshot)
@@ -136,6 +140,10 @@ struct ModeBar: View {
                 tool(.checkmark, labeled: true)
                 tool(.cross, labeled: true)
                 stampMenu
+                if let annotation = model.selectedAnnotation {
+                    action("Delete \(annotation.displayName)", "trash") { model.deleteSelectedAnnotation() }
+                    action("Duplicate", "plus.rectangle.on.rectangle") { model.duplicateSelectedAnnotation() }
+                }
                 action("Image", "photo") { model.chooseImage() }
                     .background(selectedBackground(model.tool == .image))
             case .scan:

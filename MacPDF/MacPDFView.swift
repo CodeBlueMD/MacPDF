@@ -14,6 +14,13 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     /// Edit → Image drag on a selected image: moving it, or resizing from a corner (0–3).
     private var imageDrag: (start: CGPoint, original: CGRect, corner: Int?, current: CGRect)?
 
+    /// Stamp or annotation drag on a selected annotation: moving it, or resizing from a corner (0–3).
+    private var annotationDrag: (start: CGPoint, originalBounds: CGRect, annotation: PDFAnnotation, page: PDFPage, moved: Bool, current: CGRect, corner: Int?)?
+
+    private func beginAnnotationDrag(_ annotation: PDFAnnotation, at point: CGPoint, on page: PDFPage, corner: Int?) {
+        annotationDrag = (point, annotation.bounds, annotation, page, false, annotation.bounds, corner)
+    }
+
     /// Redact tool started on text, so PDFView's own text selection is running.
     private var redactingSelection = false
 
@@ -37,6 +44,10 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
             },
             center.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
                 self?.endInlineEdit()
+            },
+            center.addObserver(forName: .PDFViewScaleChanged, object: self, queue: .main) { [weak self] _ in
+                self?.updateImageSelection()
+                self?.updateAnnotationSelection()
             },
         ]
         saveKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -98,12 +109,53 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         endInlineEdit()
         // Clicking away from an open text box just finishes it, like PDF Expert.
         if wasEditing, model?.tool == .editText || model?.tool == .textBox { return }
-        guard let model, model.tool != .select, model.tool.markupSubtype == nil,
-              let (page, point) = pagePoint(event) else {
+
+        guard let (page, point) = pagePoint(event), let model else {
             super.mouseDown(with: event)
             finishTextGestureIfReleased()
             return
         }
+
+        // 1. If an annotation is already selected on this page, did we click inside it or near its handles?
+        if let selected = model.selectedAnnotation, selected.page === page {
+            let hitTol = 8 / max(scaleFactor, 0.1)
+            let expanded = selected.bounds.insetBy(dx: -hitTol, dy: -hitTol)
+            if expanded.contains(point) {
+                let cornerIndex = corner(near: point, of: selected.bounds)
+                beginAnnotationDrag(selected, at: point, on: page, corner: cornerIndex)
+                return
+            }
+        }
+
+        // 2. If tool is .select or .stamp, check if clicking on any existing stamp
+        if model.tool == .select || model.tool == .stamp {
+            if let hit = stampAnnotation(at: point, on: page) {
+                model.selectedAnnotation = hit
+                let cornerIndex = corner(near: point, of: hit.bounds)
+                beginAnnotationDrag(hit, at: point, on: page, corner: cornerIndex)
+                return
+            }
+        }
+
+        // 3. If .select tool and clicking on empty space: deselect any selected annotation
+        if model.tool == .select {
+            model.selectedAnnotation = nil
+            super.mouseDown(with: event)
+            finishTextGestureIfReleased()
+            return
+        }
+
+        // Deselect annotation when switching to another drawing/editing tool
+        if model.tool != .stamp {
+            model.selectedAnnotation = nil
+        }
+
+        guard model.tool.markupSubtype == nil else {
+            super.mouseDown(with: event)
+            finishTextGestureIfReleased()
+            return
+        }
+
         let hit = page.annotation(at: point)
         switch model.tool {
         case .note:
@@ -129,9 +181,11 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         case .signature:
             model.placeSignature(at: point, on: page)
         case .stamp:
-            model.addStamp(at: point, on: page)
+            let stamp = model.addStamp(at: point, on: page)
+            beginAnnotationDrag(stamp, at: point, on: page, corner: nil)
         case .date, .checkmark, .cross:
-            model.addFillText(model.tool, at: point, on: page)
+            let fill = model.addFillText(model.tool, at: point, on: page)
+            beginAnnotationDrag(fill, at: point, on: page, corner: nil)
         case .image where model.pendingImage == nil:
             if !beginImagePress(at: point, on: page, model: model) { model.selectedImage = nil }
         case .redact where isOverText(point, on: page):
@@ -165,6 +219,31 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if var drag = annotationDrag {
+            let viewPoint = convert(event.locationInWindow, from: nil)
+            let point = convert(viewPoint, to: drag.page)
+            let deltaX = point.x - drag.start.x
+            let deltaY = point.y - drag.start.y
+            if !drag.moved, hypot(deltaX, deltaY) < 3 { return }
+            drag.moved = true
+
+            let candidateRect = Self.dragged(drag.originalBounds, corner: drag.corner, from: drag.start, to: point)
+            var guides: [(CGPoint, CGPoint)] = []
+            if drag.corner == nil {
+                (drag.current, guides) = snap(candidateRect, on: drag.page, ignoring: drag.originalBounds)
+            } else {
+                drag.current = candidateRect
+            }
+            annotationDrag = drag
+
+            if let documentView {
+                let rect = documentView.convert(convert(drag.current, from: drag.page), from: self)
+                annotationSelectionBox.frame = rect.insetBy(dx: -SelectionBox.handle, dy: -SelectionBox.handle)
+                annotationSelectionBox.isHidden = false
+            }
+            showGuides(guides, on: drag.page, box: drag.current)
+            return
+        }
         if var press = textPress {
             let viewPoint = convert(event.locationInWindow, from: nil)
             if !press.moved, hypot(viewPoint.x - press.viewStart.x, viewPoint.y - press.viewStart.y) < 4 { return }
@@ -202,6 +281,21 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
     override func mouseUp(with event: NSEvent) {
         guard let model else { return super.mouseUp(with: event) }
+
+        if let drag = annotationDrag {
+            annotationDrag = nil
+            clearPreview()
+            if drag.moved {
+                let movedDist = hypot(drag.current.minX - drag.originalBounds.minX, drag.current.minY - drag.originalBounds.minY)
+                    + abs(drag.current.width - drag.originalBounds.width)
+                    + abs(drag.current.height - drag.originalBounds.height)
+                if movedDist > 1 {
+                    model.moveAnnotation(drag.annotation, to: drag.current)
+                }
+            }
+            updateAnnotationSelection()
+            return
+        }
 
         if let press = textPress {
             textPress = nil
@@ -293,7 +387,7 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         }
     }
 
-    // MARK: Image selection
+    // MARK: Image & Annotation selection
 
     /// Dashed outline and corner handles around the selected image; lives in the document view so
     /// it scrolls with the page.
@@ -313,6 +407,43 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
         selectionBox.frame = rect.insetBy(dx: -SelectionBox.handle, dy: -SelectionBox.handle)
         selectionBox.isHidden = false
         selectionBox.needsDisplay = true
+    }
+
+    /// Dashed outline and corner handles around the selected stamp or annotation.
+    private lazy var annotationSelectionBox: SelectionBox = {
+        let box = SelectionBox(frame: .zero)
+        box.isHidden = true
+        return box
+    }()
+
+    func updateAnnotationSelection() {
+        guard let annotation = model?.selectedAnnotation,
+              let page = annotation.page,
+              page.document != nil,
+              let documentView else {
+            annotationSelectionBox.isHidden = true
+            window?.invalidateCursorRects(for: self)
+            return
+        }
+        if annotationSelectionBox.superview !== documentView { documentView.addSubview(annotationSelectionBox) }
+        let rect = documentView.convert(convert(annotation.bounds, from: page), from: self)
+        annotationSelectionBox.frame = rect.insetBy(dx: -SelectionBox.handle, dy: -SelectionBox.handle)
+        annotationSelectionBox.isHidden = false
+        annotationSelectionBox.needsDisplay = true
+        window?.invalidateCursorRects(for: self)
+    }
+
+    func stampAnnotation(at point: CGPoint, on page: PDFPage) -> PDFAnnotation? {
+        if let hit = page.annotation(at: point), hit.isStamp {
+            return hit
+        }
+        let tolerance = 8 / max(scaleFactor, 0.1)
+        for annotation in page.annotations.reversed() where annotation.isStamp {
+            if annotation.bounds.insetBy(dx: -tolerance, dy: -tolerance).contains(point) {
+                return annotation
+            }
+        }
+        return nil
     }
 
     /// Which corner of `rect` (0 bottom-left, 1 bottom-right, 2 top-right, 3 top-left) is under `point`.
@@ -337,12 +468,80 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
+        // Delete / forward delete removes the selected stamp or annotation.
+        if model?.selectedAnnotation != nil, event.keyCode == 51 || event.keyCode == 117 {
+            model?.deleteSelectedAnnotation()
+            return
+        }
         // Delete / forward delete removes the selected image.
         if model?.selectedImage != nil, event.keyCode == 51 || event.keyCode == 117 {
             model?.deleteSelectedImage()
             return
         }
         super.keyDown(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if blockEditor != nil {
+            endBlockEdit(cancel: true)
+            return
+        }
+        if model?.selectedAnnotation != nil {
+            model?.selectedAnnotation = nil
+            return
+        }
+        if model?.selectedImage != nil {
+            model?.selectedImage = nil
+            return
+        }
+        super.cancelOperation(sender)
+    }
+
+    override func layout() {
+        super.layout()
+        updateImageSelection()
+        updateAnnotationSelection()
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        if let (page, point) = pagePoint(event) {
+            let hit = stampAnnotation(at: point, on: page)
+                ?? ((model?.selectedAnnotation?.page === page && model?.selectedAnnotation?.bounds.contains(point) == true) ? model?.selectedAnnotation : nil)
+            if let hit {
+                model?.selectedAnnotation = hit
+                let menu = NSMenu(title: "Stamp")
+                let deleteItem = NSMenuItem(title: "Delete \(hit.displayName)", action: #selector(deleteSelectedAnnotationAction(_:)), keyEquivalent: "\u{08}")
+                deleteItem.target = self
+                menu.addItem(deleteItem)
+
+                let duplicateItem = NSMenuItem(title: "Duplicate \(hit.displayName)", action: #selector(duplicateSelectedAnnotationAction(_:)), keyEquivalent: "d")
+                duplicateItem.target = self
+                menu.addItem(duplicateItem)
+
+                menu.addItem(NSMenuItem.separator())
+                let frontItem = NSMenuItem(title: "Bring to Front", action: #selector(bringSelectedAnnotationToFrontAction(_:)), keyEquivalent: "")
+                frontItem.target = self
+                menu.addItem(frontItem)
+                return menu
+            }
+        }
+        return super.menu(for: event)
+    }
+
+    @objc func deleteSelectedAnnotationAction(_ sender: Any?) {
+        model?.deleteSelectedAnnotation()
+    }
+
+    @objc func duplicateSelectedAnnotationAction(_ sender: Any?) {
+        model?.duplicateSelectedAnnotation()
+    }
+
+    @objc func bringSelectedAnnotationToFrontAction(_ sender: Any?) {
+        guard let annotation = model?.selectedAnnotation, let page = annotation.page else { return }
+        page.removeAnnotation(annotation)
+        page.addAnnotation(annotation)
+        model?.refresh(page)
+        updateAnnotationSelection()
     }
 
     // MARK: Drag previews
@@ -770,10 +969,28 @@ final class MacPDFView: PDFView, NSTextFieldDelegate, NSTextViewDelegate {
 
     override func resetCursorRects() {
         super.resetCursorRects()
+        if let selected = model?.selectedAnnotation, let page = selected.page, selected.page?.document != nil {
+            let viewRect = convert(selected.bounds, from: page)
+            addCursorRect(viewRect, cursor: .openHand)
+            let tol: CGFloat = 8
+            let corners = [
+                CGRect(x: viewRect.minX - tol, y: viewRect.minY - tol, width: 2 * tol, height: 2 * tol),
+                CGRect(x: viewRect.maxX - tol, y: viewRect.minY - tol, width: 2 * tol, height: 2 * tol),
+                CGRect(x: viewRect.maxX - tol, y: viewRect.maxY - tol, width: 2 * tol, height: 2 * tol),
+                CGRect(x: viewRect.minX - tol, y: viewRect.maxY - tol, width: 2 * tol, height: 2 * tol)
+            ]
+            corners.forEach { addCursorRect($0, cursor: .crosshair) }
+        }
         switch model?.tool {
         case .select, .highlight, .underline, .strikeOut, .none: break
         case .editText, .textBox, .redact: addCursorRect(visibleRect, cursor: .iBeam)
         case .eraser: addCursorRect(visibleRect, cursor: .disappearingItem)
+        case .stamp:
+            if let selected = model?.selectedAnnotation, let page = selected.page {
+                let viewRect = convert(selected.bounds, from: page)
+                addCursorRect(viewRect, cursor: .openHand)
+            }
+            addCursorRect(visibleRect, cursor: .crosshair)
         default: addCursorRect(visibleRect, cursor: .crosshair)
         }
     }

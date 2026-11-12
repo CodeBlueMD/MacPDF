@@ -25,6 +25,26 @@ struct MacPDFCommands: Commands {
                 .disabled(model == nil)
         }
 
+        CommandGroup(after: .pasteboard) {
+            Button("Delete") {
+                if model?.selectedAnnotation != nil {
+                    model?.deleteSelectedAnnotation()
+                } else if model?.selectedImage != nil {
+                    model?.deleteSelectedImage()
+                }
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+            .disabled(model?.selectedAnnotation == nil && model?.selectedImage == nil)
+
+            Button("Duplicate") {
+                if model?.selectedAnnotation != nil {
+                    model?.duplicateSelectedAnnotation()
+                }
+            }
+            .keyboardShortcut("d", modifiers: [.command])
+            .disabled(model?.selectedAnnotation == nil)
+        }
+
         CommandGroup(after: .toolbar) {
             Button("Zoom In") { model?.pdfView.zoomIn(nil) }
                 .keyboardShortcut("=")

@@ -40,7 +40,17 @@ final class DocumentModel: ObservableObject {
     @Published var pendingImage: NSImage?
     /// Image on the page selected with Edit → Image.
     @Published var selectedImage: ImageSelection? {
-        didSet { pdfView.updateImageSelection() }
+        didSet {
+            if selectedImage != nil { selectedAnnotation = nil }
+            pdfView.updateImageSelection()
+        }
+    }
+    /// Stamp or annotation on the page selected for moving or deleting.
+    @Published var selectedAnnotation: PDFAnnotation? {
+        didSet {
+            if selectedAnnotation != nil { selectedImage = nil }
+            pdfView.updateAnnotationSelection()
+        }
     }
 
     @Published var sidebarMode: SidebarMode = .thumbnails
@@ -225,12 +235,60 @@ final class DocumentModel: ObservableObject {
     }
 
     func remove(_ annotation: PDFAnnotation) {
+        if selectedAnnotation === annotation { selectedAnnotation = nil }
         guard let page = annotation.page else { return }
         page.removeAnnotation(annotation)
         refresh(page)
         undoManager?.registerUndo(withTarget: self) { $0.add(annotation, to: page) }
         undoManager?.setActionName("Delete \(annotation.displayName)")
         annotationsVersion += 1
+    }
+
+    func deleteSelectedAnnotation() {
+        guard let annotation = selectedAnnotation else { return }
+        selectedAnnotation = nil
+        remove(annotation)
+    }
+
+    func moveAnnotation(_ annotation: PDFAnnotation, to newBounds: CGRect) {
+        guard let page = annotation.page else { return }
+        let oldBounds = annotation.bounds
+        guard oldBounds != newBounds else { return }
+        page.removeAnnotation(annotation)
+        annotation.bounds = newBounds
+        page.addAnnotation(annotation)
+        refresh(page)
+        pdfView.updateAnnotationSelection()
+        undoManager?.registerUndo(withTarget: self) { model in
+            model.moveAnnotation(annotation, to: oldBounds)
+        }
+        undoManager?.setActionName("Move \(annotation.displayName)")
+        annotationsVersion += 1
+    }
+
+    func duplicateSelectedAnnotation() {
+        guard let annotation = selectedAnnotation, let page = annotation.page else { return }
+        if let stamp = annotation as? StampAnnotation {
+            let offset: CGFloat = 20
+            let newCenter = CGPoint(x: stamp.bounds.midX + offset, y: stamp.bounds.midY - offset)
+            let duplicate = StampAnnotation(item: stamp.stampItem, center: newCenter)
+            add(duplicate, to: page)
+            selectedAnnotation = duplicate
+        } else if let fill = annotation as? VectorFillAnnotation {
+            let offset: CGFloat = 20
+            let newCenter = CGPoint(x: fill.bounds.midX + offset, y: fill.bounds.midY - offset)
+            let duplicate = VectorFillAnnotation(text: fill.text, textColor: fill.textColor, at: newCenter, isDate: fill.isDate)
+            add(duplicate, to: page)
+            selectedAnnotation = duplicate
+        } else {
+            let newBounds = annotation.bounds.offsetBy(dx: 20, dy: -20)
+            let subtype = annotation.type.flatMap { PDFAnnotationSubtype(rawValue: $0) } ?? .stamp
+            let duplicate = PDFAnnotation(bounds: newBounds, forType: subtype, withProperties: nil)
+            duplicate.contents = annotation.contents
+            duplicate.color = annotation.color
+            add(duplicate, to: page)
+            selectedAnnotation = duplicate
+        }
     }
 
     func setContents(_ text: String, of annotation: PDFAnnotation) {
@@ -351,16 +409,20 @@ final class DocumentModel: ObservableObject {
     }
 
     /// A vector-drawn stamp badge rendered with CoreGraphics so it stays crisp at all zoom levels.
-    func addStamp(at point: CGPoint, on page: PDFPage) {
+    @discardableResult
+    func addStamp(at point: CGPoint, on page: PDFPage) -> StampAnnotation {
         var item = activeStamp
         // The REVISED stamp shows when it was placed, not when the app launched.
         if item.style == .dateTime { item.subtitle = StampCatalog.dynamicDateString() }
         let stamp = StampAnnotation(item: item, center: point)
         add(stamp, to: page)
+        selectedAnnotation = stamp
+        return stamp
     }
 
     /// Vector-rendered date and mark text annotations that remain pin-sharp at any zoom.
-    func addFillText(_ tool: Tool, at point: CGPoint, on page: PDFPage) {
+    @discardableResult
+    func addFillText(_ tool: Tool, at point: CGPoint, on page: PDFPage) -> VectorFillAnnotation {
         let text: String
         switch tool {
         case .date:
@@ -372,6 +434,8 @@ final class DocumentModel: ObservableObject {
         }
         let annotation = VectorFillAnnotation(text: text, textColor: nsColor, at: point, isDate: tool == .date)
         add(annotation, to: page)
+        selectedAnnotation = annotation
+        return annotation
     }
 
     // MARK: Text annotations (Annotate → Text; Edit → Text rewrites page content, see TextEditing.swift)
@@ -662,6 +726,13 @@ extension PDFAnnotation {
     }
 
     var isFreeText: Bool { subtypeName == "FreeText" }
+
+    var isStamp: Bool {
+        if self is StampAnnotation { return true }
+        if self is VectorFillAnnotation { return true }
+        if tag == .stamp { return true }
+        return subtypeName == "Stamp"
+    }
 
     private var subtypeName: String {
         (type ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
