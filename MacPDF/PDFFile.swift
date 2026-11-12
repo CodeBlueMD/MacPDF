@@ -52,10 +52,28 @@ final class PDFFile: ReferenceFileDocument {
             }
             _ = sema.wait(timeout: .now() + .milliseconds(500))
         }
+
+        // Fail-closed security check: If any pending redaction annotations remain unburned
+        // (e.g. background save while main thread was busy or burn timed out), refuse to write to disk.
+        if hasPendingRedactions {
+            throw CocoaError(.fileWriteUnknown, userInfo: [
+                NSLocalizedDescriptionKey: "Cannot save document: pending redactions have not finished burning."
+            ])
+        }
+
         guard let data = pdf.dataRepresentation() else {
             throw CocoaError(.fileWriteUnknown)
         }
         return data
+    }
+
+    var hasPendingRedactions: Bool {
+        for i in 0..<pdf.pageCount {
+            if let page = pdf.page(at: i), page.annotations.contains(where: { $0.tag == .redaction }) {
+                return true
+            }
+        }
+        return false
     }
 
     func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {

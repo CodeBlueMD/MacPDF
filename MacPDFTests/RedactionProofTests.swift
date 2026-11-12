@@ -274,4 +274,86 @@ final class RedactionProofTests: XCTestCase {
         XCTAssertNotNil(bgData)
         XCTAssertTrue(willSaveCalled, "willSave must be executed without deadlocking")
     }
+
+    @MainActor
+    func testBackgroundSaveFailsClosedWhenRedactionsPending() throws {
+        let url = fixturesURL.appendingPathComponent("plain-text.pdf")
+        let data = try Data(contentsOf: url)
+        let file = try PDFFile(data: data)
+        let model = DocumentModel(pdf: file.pdf)
+
+        let patientID = "PT-98234-X"
+        let matches = file.pdf.findString(patientID, withOptions: [])
+        XCTAssertFalse(matches.isEmpty)
+
+        // Mark a redaction (creates an unburned redaction annotation on page)
+        model.redact(matches[0])
+        XCTAssertTrue(file.hasPendingRedactions, "Precondition: Redaction annotation must be present")
+
+        // Simulate a save where willSave does NOT burn redactions (e.g. main thread busy or burn timed out)
+        file.willSave = {
+            // Intentionally omit burning to simulate failure/timeout
+        }
+
+        // 1. Assert that snapshot from a background queue throws CocoaError(.fileWriteUnknown) rather than writing unredacted text
+        let exp = expectation(description: "Background save fails closed")
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                _ = try file.snapshot(contentType: .pdf)
+                XCTFail("Snapshot should have thrown CocoaError(.fileWriteUnknown) due to pending redactions")
+            } catch let error as CocoaError {
+                XCTAssertEqual(error.code, .fileWriteUnknown)
+                XCTAssertTrue(error.localizedDescription.contains("pending redactions"))
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 5.0)
+
+        // 2. Assert that direct snapshot also throws rather than saving unburned redactions
+        do {
+            _ = try file.snapshot(contentType: .pdf)
+            XCTFail("Direct snapshot should have thrown CocoaError(.fileWriteUnknown)")
+        } catch let error as CocoaError {
+            XCTAssertEqual(error.code, .fileWriteUnknown)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    @MainActor
+    func testSubsetFontsExtractionOnlyRedaction() async throws {
+        let url = fixturesURL.appendingPathComponent("subset-fonts.pdf")
+        let doc = try XCTUnwrap(PDFDocument(url: url))
+        let model = DocumentModel(pdf: doc)
+
+        let target = "SUBSET-7701"
+
+        // Negative control: verify target exists in extraction and search
+        let matches = doc.findString(target, withOptions: [])
+        XCTAssertFalse(matches.isEmpty, "Precondition: Diagnostic code must exist initially")
+        let initialPageString = try XCTUnwrap(doc.page(at: 0)?.string)
+        XCTAssertTrue(initialPageString.contains(target), "Precondition: Target must exist in page string")
+
+        // Redact target selection
+        model.redact(matches[0])
+        await model.burnAllPendingRedactions()
+
+        // Capture serialized PDF
+        let savedData = try XCTUnwrap(doc.dataRepresentation())
+        let reopenedDoc = try XCTUnwrap(PDFDocument(data: savedData))
+        let reopenedPage = try XCTUnwrap(reopenedDoc.page(at: 0))
+
+        // Assert target is purged from extraction
+        let extracted = reopenedPage.string ?? ""
+        XCTAssertFalse(extracted.contains(target), "Redacted text '\(target)' must not be present in extracted text")
+        XCTAssertTrue(reopenedDoc.findString(target, withOptions: []).isEmpty, "findString must return no matches for '\(target)'")
+
+        // Assert unredacted text remains intact
+        XCTAssertTrue(extracted.contains("SUBSET FONT SPECIMEN") || extracted.contains("SPECIMEN"),
+                      "Unredacted text should survive rasterization/OCR")
+        XCTAssertTrue(extracted.contains("REC-88329-Z") || extracted.contains("88329"),
+                      "Other text lines should survive rasterization/OCR")
+    }
 }
